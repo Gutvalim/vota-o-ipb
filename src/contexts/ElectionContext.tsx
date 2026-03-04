@@ -18,9 +18,12 @@ export interface Scrutiny {
   type: ScrutinyType;
   round: number;
   status: ScrutinyStatus;
-  votes: Record<string, number>; // candidateId -> count
+  votes: Record<string, number>;
   totalVotes: number;
   startedAt?: number;
+  participatingCandidateIds: string[];
+  resultsApproved: boolean;
+  electedIds: string[];
 }
 
 export interface ElectionState {
@@ -56,38 +59,55 @@ type Action =
   | { type: 'ADD_CANDIDATE'; payload: Candidate }
   | { type: 'REMOVE_CANDIDATE'; payload: string }
   | { type: 'UPDATE_CANDIDATE'; payload: Candidate }
-  | { type: 'START_SCRUTINY'; payload: { type: ScrutinyType; round: number } }
+  | { type: 'START_SCRUTINY'; payload: { type: ScrutinyType; round: number; participatingCandidateIds: string[] } }
   | { type: 'CAST_VOTE'; payload: { scrutinyId: string; candidateIds: string[] } }
   | { type: 'CLOSE_SCRUTINY'; payload: string }
+  | { type: 'APPROVE_RESULTS'; payload: string }
   | { type: 'ADD_ALERT'; payload: string }
   | { type: 'CLEAR_ALERTS' }
   | { type: 'SET_ELECTED'; payload: { type: ScrutinyType; candidateIds: string[] } }
   | { type: 'RESET' };
 
-function resolveResults(
+export function resolveResults(
   scrutiny: Scrutiny,
   candidates: Candidate[],
-  slots: number
+  slots: number,
+  alreadyElected: string[] = []
 ): { elected: string[]; tied: boolean } {
+  const remainingSlots = slots - alreadyElected.length;
+  if (remainingSlots <= 0) return { elected: [], tied: false };
+
+  const majorityThreshold = Math.floor(scrutiny.totalVotes / 2) + 1;
+  const isThirdOrLater = scrutiny.round >= 3;
+
   const entries = Object.entries(scrutiny.votes)
+    .filter(([id]) => scrutiny.participatingCandidateIds.includes(id))
     .map(([id, count]) => ({
       id,
       count,
       candidate: candidates.find(c => c.id === id)!,
     }))
+    .filter(e => e.candidate)
     .sort((a, b) => {
       if (b.count !== a.count) return b.count - a.count;
-      // Tiebreaker: older candidate wins
       const dateA = new Date(a.candidate.birthDate).getTime();
       const dateB = new Date(b.candidate.birthDate).getTime();
-      return dateA - dateB; // older = smaller timestamp = first
+      return dateA - dateB;
     });
 
-  const elected = entries.slice(0, slots).map(e => e.id);
-  const threshold = Math.floor(scrutiny.totalVotes / 2) + 1;
-  const allHaveMajority = elected.every(id => (scrutiny.votes[id] || 0) >= threshold);
-  
-  return { elected, tied: !allHaveMajority };
+  let elected: string[];
+  if (isThirdOrLater) {
+    // 3rd scrutiny: relative majority
+    elected = entries.slice(0, remainingSlots).map(e => e.id);
+  } else {
+    // 1st and 2nd: need absolute majority
+    elected = entries
+      .filter(e => e.count >= majorityThreshold)
+      .slice(0, remainingSlots)
+      .map(e => e.id);
+  }
+
+  return { elected, tied: false };
 }
 
 function reducer(state: ElectionState, action: Action): ElectionState {
@@ -118,14 +138,12 @@ function reducer(state: ElectionState, action: Action): ElectionState {
         votes: {},
         totalVotes: 0,
         startedAt: Date.now(),
+        participatingCandidateIds: action.payload.participatingCandidateIds,
+        resultsApproved: false,
+        electedIds: [],
       };
-      // Initialize votes for relevant candidates
-      const relevantCandidates = state.candidates.filter(c => {
-        if (action.payload.type === 'presbitero') return true; // all can run for presbyter
-        return true; // all can run for deacon too
-      });
-      relevantCandidates.forEach(c => {
-        newScrutiny.votes[c.id] = 0;
+      action.payload.participatingCandidateIds.forEach(id => {
+        newScrutiny.votes[id] = 0;
       });
       return {
         ...state,
@@ -141,8 +159,45 @@ function reducer(state: ElectionState, action: Action): ElectionState {
         action.payload.candidateIds.forEach(id => {
           newVotes[id] = (newVotes[id] || 0) + 1;
         });
-        return { ...s, votes: newVotes, totalVotes: s.totalVotes + 1 };
+        const newTotal = s.totalVotes + 1;
+        // Auto-close when voter goal reached
+        const shouldClose = state.voterGoal > 0 && newTotal >= state.voterGoal;
+        return { ...s, votes: newVotes, totalVotes: newTotal, status: shouldClose ? 'closed' as const : s.status };
       });
+
+      const closedScrutiny = scrutinies.find(s => s.id === action.payload.scrutinyId && s.status === 'closed');
+      if (closedScrutiny && closedScrutiny.status === 'closed') {
+        // Process results
+        const alreadyElected = closedScrutiny.type === 'presbitero' ? state.electedPresbyters : state.electedDeacons;
+        const slots = closedScrutiny.type === 'presbitero' ? state.presbyterSlots : state.deaconSlots;
+        const { elected } = resolveResults(closedScrutiny, state.candidates, slots, alreadyElected);
+        
+        const alerts: string[] = [];
+        if (closedScrutiny.type === 'presbitero') {
+          elected.forEach(id => {
+            const candidate = state.candidates.find(c => c.id === id);
+            if (candidate && (candidate.currentRole === 'diacono' || candidate.currentRole === 'diacono_vencimento')) {
+              alerts.push(
+                `⚠️ ${candidate.name} é atualmente ${candidate.currentRole === 'diacono' ? 'Diácono' : 'Diácono em Vencimento'} e foi eleito Presbítero. Ajuste o número de vagas ou candidatos para a votação de Diáconos.`
+              );
+            }
+          });
+        }
+
+        const updatedScrutinies = scrutinies.map(s =>
+          s.id === closedScrutiny.id ? { ...s, electedIds: elected } : s
+        );
+
+        return {
+          ...state,
+          scrutinies: updatedScrutinies,
+          currentScrutinyId: null,
+          alerts: [...state.alerts, ...alerts],
+          electedPresbyters: closedScrutiny.type === 'presbitero' ? [...alreadyElected, ...elected] : state.electedPresbyters,
+          electedDeacons: closedScrutiny.type === 'diacono' ? [...alreadyElected, ...elected] : state.electedDeacons,
+        };
+      }
+
       return { ...state, scrutinies };
     }
 
@@ -154,10 +209,10 @@ function reducer(state: ElectionState, action: Action): ElectionState {
       });
 
       const closedScrutiny = scrutinies.find(s => s.id === action.payload)!;
+      const alreadyElected = closedScrutiny.type === 'presbitero' ? state.electedPresbyters : state.electedDeacons;
       const slots = closedScrutiny.type === 'presbitero' ? state.presbyterSlots : state.deaconSlots;
-      const { elected } = resolveResults(closedScrutiny, state.candidates, slots);
+      const { elected } = resolveResults(closedScrutiny, state.candidates, slots, alreadyElected);
 
-      // Check vacancy logic
       if (closedScrutiny.type === 'presbitero') {
         elected.forEach(id => {
           const candidate = state.candidates.find(c => c.id === id);
@@ -169,20 +224,27 @@ function reducer(state: ElectionState, action: Action): ElectionState {
         });
       }
 
-      const newState = {
+      const updatedScrutinies = scrutinies.map(s =>
+        s.id === action.payload ? { ...s, electedIds: elected } : s
+      );
+
+      return {
         ...state,
-        scrutinies,
+        scrutinies: updatedScrutinies,
         currentScrutinyId: null,
         alerts: [...state.alerts, ...alerts],
+        electedPresbyters: closedScrutiny.type === 'presbitero' ? [...alreadyElected, ...elected] : state.electedPresbyters,
+        electedDeacons: closedScrutiny.type === 'diacono' ? [...alreadyElected, ...elected] : state.electedDeacons,
       };
+    }
 
-      if (closedScrutiny.type === 'presbitero') {
-        newState.electedPresbyters = elected;
-      } else {
-        newState.electedDeacons = elected;
-      }
-
-      return newState;
+    case 'APPROVE_RESULTS': {
+      return {
+        ...state,
+        scrutinies: state.scrutinies.map(s =>
+          s.id === action.payload ? { ...s, resultsApproved: true } : s
+        ),
+      };
     }
 
     case 'ADD_ALERT':
@@ -208,7 +270,7 @@ function reducer(state: ElectionState, action: Action): ElectionState {
 const ElectionContext = createContext<{
   state: ElectionState;
   dispatch: React.Dispatch<Action>;
-  resolveResults: (scrutiny: Scrutiny, slots: number) => { elected: string[]; tied: boolean };
+  resolveScrutinyResults: (scrutiny: Scrutiny, slots: number, alreadyElected?: string[]) => { elected: string[]; tied: boolean };
 } | null>(null);
 
 export function ElectionProvider({ children }: { children: ReactNode }) {
@@ -225,11 +287,11 @@ export function ElectionProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('ipb-election', JSON.stringify(state));
   }, [state]);
 
-  const resolve = (scrutiny: Scrutiny, slots: number) =>
-    resolveResults(scrutiny, state.candidates, slots);
+  const resolveScrutinyResults = (scrutiny: Scrutiny, slots: number, alreadyElected: string[] = []) =>
+    resolveResults(scrutiny, state.candidates, slots, alreadyElected);
 
   return (
-    <ElectionContext.Provider value={{ state, dispatch, resolveResults: resolve }}>
+    <ElectionContext.Provider value={{ state, dispatch, resolveScrutinyResults }}>
       {children}
     </ElectionContext.Provider>
   );

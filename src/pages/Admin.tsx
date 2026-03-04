@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { useElection, Candidate, CandidateRole } from '@/contexts/ElectionContext';
+import { useElection, Candidate, CandidateRole, ScrutinyType } from '@/contexts/ElectionContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,8 +8,9 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
-  ArrowLeft, Plus, Trash2, Play, Square, AlertTriangle, Users, Award, RotateCcw, UserPlus
+  ArrowLeft, Plus, Trash2, Play, Square, AlertTriangle, Users, Award, RotateCcw, UserPlus, LogOut, CheckCircle2, XCircle, ShieldCheck, Eye
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -21,14 +23,26 @@ const ROLE_LABELS: Record<CandidateRole, string> = {
 };
 
 export default function Admin() {
-  const { state, dispatch } = useElection();
+  const { state, dispatch, resolveScrutinyResults } = useElection();
+  const { currentUser, users, logout, approveUser, rejectUser } = useAuth();
   const navigate = useNavigate();
+
   const [showCandidateForm, setShowCandidateForm] = useState(false);
   const [editingCandidate, setEditingCandidate] = useState<Candidate | null>(null);
   const [form, setForm] = useState({ name: '', photo: '', birthDate: '', currentRole: 'membro' as CandidateRole });
+  const [startingScrutinyType, setStartingScrutinyType] = useState<ScrutinyType | null>(null);
+  const [selectedParticipants, setSelectedParticipants] = useState<string[]>([]);
+
+  // Auth guard
+  if (!currentUser) {
+    navigate('/login');
+    return null;
+  }
 
   const currentScrutiny = state.scrutinies.find(s => s.id === state.currentScrutinyId);
   const isVotingOpen = currentScrutiny?.status === 'open';
+
+  const pendingUsers = users.filter(u => !u.approved);
 
   const handleSaveElection = (field: string, value: string | number) => {
     dispatch({ type: 'SET_ELECTION', payload: { [field]: value } });
@@ -54,10 +68,7 @@ export default function Admin() {
       setEditingCandidate(null);
       toast.success('Candidato atualizado');
     } else {
-      const candidate: Candidate = {
-        id: crypto.randomUUID(),
-        ...form,
-      };
+      const candidate: Candidate = { id: crypto.randomUUID(), ...form };
       dispatch({ type: 'ADD_CANDIDATE', payload: candidate });
       toast.success('Candidato adicionado');
     }
@@ -65,10 +76,51 @@ export default function Admin() {
     setShowCandidateForm(false);
   };
 
-  const handleStartScrutiny = (type: 'presbitero' | 'diacono') => {
-    const existingRounds = state.scrutinies.filter(s => s.type === type).length;
-    dispatch({ type: 'START_SCRUTINY', payload: { type, round: existingRounds + 1 } });
-    toast.success(`Votação de ${type === 'presbitero' ? 'Presbíteros' : 'Diáconos'} iniciada — ${existingRounds + 1}º escrutínio`);
+  const handleInitiateStartScrutiny = (type: ScrutinyType) => {
+    // Determine which candidates are eligible (not already elected for this type)
+    const alreadyElected = type === 'presbitero' ? state.electedPresbyters : state.electedDeacons;
+    const previousScrutinies = state.scrutinies.filter(s => s.type === type && s.status === 'closed');
+    const lastScrutiny = previousScrutinies[previousScrutinies.length - 1];
+    const slots = type === 'presbitero' ? state.presbyterSlots : state.deaconSlots;
+    const remainingSlots = slots - alreadyElected.length;
+    const nextRound = previousScrutinies.length + 1;
+
+    let eligibleCandidates = state.candidates.filter(c => !alreadyElected.includes(c.id));
+
+    // 3rd scrutiny funneling: double the remaining slots
+    if (nextRound >= 3 && lastScrutiny) {
+      const sortedFromLast = Object.entries(lastScrutiny.votes)
+        .filter(([id]) => lastScrutiny.participatingCandidateIds.includes(id) && !alreadyElected.includes(id))
+        .sort((a, b) => {
+          if (b[1] !== a[1]) return b[1] - a[1];
+          const ca = state.candidates.find(c => c.id === a[0]);
+          const cb = state.candidates.find(c => c.id === b[0]);
+          if (!ca || !cb) return 0;
+          return new Date(ca.birthDate).getTime() - new Date(cb.birthDate).getTime();
+        });
+      const funnelCount = Math.min(remainingSlots * 2, sortedFromLast.length);
+      const funnelIds = sortedFromLast.slice(0, funnelCount).map(([id]) => id);
+      eligibleCandidates = eligibleCandidates.filter(c => funnelIds.includes(c.id));
+    }
+
+    setSelectedParticipants(eligibleCandidates.map(c => c.id));
+    setStartingScrutinyType(type);
+  };
+
+  const handleConfirmStartScrutiny = () => {
+    if (!startingScrutinyType) return;
+    if (selectedParticipants.length === 0) {
+      toast.error('Selecione pelo menos um candidato');
+      return;
+    }
+    const existingRounds = state.scrutinies.filter(s => s.type === startingScrutinyType).length;
+    dispatch({
+      type: 'START_SCRUTINY',
+      payload: { type: startingScrutinyType, round: existingRounds + 1, participatingCandidateIds: selectedParticipants },
+    });
+    toast.success(`Votação de ${startingScrutinyType === 'presbitero' ? 'Presbíteros' : 'Diáconos'} iniciada — ${existingRounds + 1}º escrutínio`);
+    setStartingScrutinyType(null);
+    setSelectedParticipants([]);
   };
 
   const handleCloseScrutiny = () => {
@@ -77,11 +129,31 @@ export default function Admin() {
     toast.success('Votação encerrada');
   };
 
+  const handleApproveResults = (scrutinyId: string) => {
+    dispatch({ type: 'APPROVE_RESULTS', payload: scrutinyId });
+    toast.success('Resultado aprovado e liberado para exibição no Data Show');
+  };
+
   const handleReset = () => {
     if (confirm('Tem certeza que deseja resetar toda a eleição? Esta ação não pode ser desfeita.')) {
       dispatch({ type: 'RESET' });
       toast.info('Eleição resetada');
     }
+  };
+
+  const handleLogout = () => {
+    logout();
+    navigate('/');
+  };
+
+  // Calculate scrutiny info for display
+  const getScrutinyInfo = (type: ScrutinyType) => {
+    const alreadyElected = type === 'presbitero' ? state.electedPresbyters : state.electedDeacons;
+    const slots = type === 'presbitero' ? state.presbyterSlots : state.deaconSlots;
+    const remainingSlots = slots - alreadyElected.length;
+    const previousRounds = state.scrutinies.filter(s => s.type === type && s.status === 'closed').length;
+    const nextRound = previousRounds + 1;
+    return { remainingSlots, nextRound, alreadyElected };
   };
 
   return (
@@ -94,17 +166,50 @@ export default function Admin() {
           </Button>
           <div>
             <h1 className="text-xl font-display font-bold">Painel Administrativo</h1>
-            <p className="text-sm text-primary-foreground/60">Configuração da Eleição</p>
+            <p className="text-sm text-primary-foreground/60">Logado como: {currentUser.username}</p>
           </div>
-          <div className="ml-auto">
+          <div className="ml-auto flex gap-2">
             <Button variant="ghost" size="sm" onClick={handleReset} className="text-primary-foreground/60 hover:text-primary-foreground hover:bg-primary-foreground/10">
               <RotateCcw className="w-4 h-4 mr-1" /> Resetar
+            </Button>
+            <Button variant="ghost" size="sm" onClick={handleLogout} className="text-primary-foreground/60 hover:text-primary-foreground hover:bg-primary-foreground/10">
+              <LogOut className="w-4 h-4 mr-1" /> Sair
             </Button>
           </div>
         </div>
       </header>
 
       <main className="max-w-5xl mx-auto p-4 md:p-6 space-y-6">
+        {/* Pending Users (only for admin) */}
+        {currentUser.isAdmin && pendingUsers.length > 0 && (
+          <Card className="border-gold bg-gold/5">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <ShieldCheck className="w-5 h-5 text-gold" />
+                Usuários Aguardando Aprovação ({pendingUsers.length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                {pendingUsers.map(u => (
+                  <div key={u.username} className="flex items-center justify-between p-3 rounded-lg border bg-card">
+                    <span className="font-semibold">{u.username}</span>
+                    <div className="flex gap-2">
+                      <Button size="sm" onClick={() => { approveUser(u.username); toast.success(`${u.username} aprovado`); }}
+                        className="bg-success text-success-foreground hover:bg-success/90">
+                        <CheckCircle2 className="w-4 h-4 mr-1" /> Aprovar
+                      </Button>
+                      <Button size="sm" variant="destructive" onClick={() => { rejectUser(u.username); toast.info(`${u.username} rejeitado`); }}>
+                        <XCircle className="w-4 h-4 mr-1" /> Rejeitar
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Alerts */}
         {state.alerts.length > 0 && (
           <Card className="border-gold bg-gold/5">
@@ -243,6 +348,70 @@ export default function Admin() {
             <CardTitle className="text-lg">Gerenciar Escrutínios</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            {/* Candidate selection modal for starting scrutiny */}
+            {startingScrutinyType && (
+              <div className="p-4 rounded-lg bg-muted border-2 border-gold/30 space-y-4">
+                <div>
+                  <h3 className="font-display font-bold text-lg">
+                    Iniciar {startingScrutinyType === 'presbitero' ? 'Eleição de Presbíteros' : 'Eleição de Diáconos'}
+                  </h3>
+                  {(() => {
+                    const info = getScrutinyInfo(startingScrutinyType);
+                    return (
+                      <div className="text-sm text-muted-foreground mt-1 space-y-1">
+                        <p><strong>{info.nextRound}º Escrutínio</strong> — {info.remainingSlots} vaga(s) restante(s)</p>
+                        {info.nextRound >= 3 && (
+                          <p className="text-gold font-semibold">⚡ Escrutínio de afunilamento: apenas os candidatos mais votados da rodada anterior foram pré-selecionados. Nesta rodada valerá a maioria relativa.</p>
+                        )}
+                      </div>
+                    );
+                  })()}
+                </div>
+                <p className="text-sm text-muted-foreground bg-card p-3 rounded border">
+                  📋 <strong>Selecione os candidatos que participarão deste escrutínio.</strong> Você pode desmarcar candidatos que desistiram ou não estão presentes. Apenas os selecionados aparecerão na urna.
+                </p>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {state.candidates
+                    .filter(c => {
+                      const alreadyElected = startingScrutinyType === 'presbitero' ? state.electedPresbyters : state.electedDeacons;
+                      return !alreadyElected.includes(c.id);
+                    })
+                    .map(c => {
+                      const isSelected = selectedParticipants.includes(c.id);
+                      return (
+                        <label key={c.id} className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${isSelected ? 'bg-gold/10 border-gold/30' : 'bg-card hover:bg-muted'}`}>
+                          <Checkbox
+                            checked={isSelected}
+                            onCheckedChange={(checked) => {
+                              setSelectedParticipants(prev =>
+                                checked ? [...prev, c.id] : prev.filter(id => id !== c.id)
+                              );
+                            }}
+                          />
+                          <div className="w-8 h-8 rounded-full bg-muted overflow-hidden shrink-0">
+                            {c.photo ? (
+                              <img src={c.photo} alt="" className="w-full h-full object-cover" />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center"><Users className="w-4 h-4 text-muted-foreground" /></div>
+                            )}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-semibold text-sm truncate">{c.name}</p>
+                            <p className="text-xs text-muted-foreground">{ROLE_LABELS[c.currentRole]}</p>
+                          </div>
+                        </label>
+                      );
+                    })}
+                </div>
+                <div className="flex gap-2">
+                  <Button onClick={handleConfirmStartScrutiny} className="bg-gold text-accent-foreground hover:bg-gold-light">
+                    <Play className="w-4 h-4 mr-1" /> Confirmar e Iniciar ({selectedParticipants.length} candidatos)
+                  </Button>
+                  <Button variant="ghost" onClick={() => setStartingScrutinyType(null)}>Cancelar</Button>
+                </div>
+              </div>
+            )}
+
             {isVotingOpen && currentScrutiny && (
               <div className="p-4 rounded-lg bg-success/10 border border-success/30">
                 <p className="font-semibold text-success flex items-center gap-2">
@@ -258,20 +427,36 @@ export default function Admin() {
               </div>
             )}
 
-            {!isVotingOpen && (
-              <div className="flex flex-wrap gap-3">
-                <Button onClick={() => handleStartScrutiny('presbitero')}
-                  disabled={state.candidates.length === 0 || state.presbyterSlots === 0}
-                  className="bg-navy hover:bg-navy-light text-primary-foreground"
-                >
-                  <Play className="w-4 h-4 mr-1" /> Iniciar Votação — Presbíteros
-                </Button>
-                <Button onClick={() => handleStartScrutiny('diacono')}
-                  disabled={state.candidates.length === 0 || state.deaconSlots === 0}
-                  className="bg-navy hover:bg-navy-light text-primary-foreground"
-                >
-                  <Play className="w-4 h-4 mr-1" /> Iniciar Votação — Diáconos
-                </Button>
+            {!isVotingOpen && !startingScrutinyType && (
+              <div className="space-y-3">
+                <div className="flex flex-wrap gap-3">
+                  {(() => {
+                    const presInfo = getScrutinyInfo('presbitero');
+                    return presInfo.remainingSlots > 0 ? (
+                      <Button onClick={() => handleInitiateStartScrutiny('presbitero')}
+                        disabled={state.candidates.length === 0 || state.presbyterSlots === 0}
+                        className="bg-navy hover:bg-navy-light text-primary-foreground"
+                      >
+                        <Play className="w-4 h-4 mr-1" /> Iniciar Votação — Presbíteros ({presInfo.nextRound}º esc.)
+                      </Button>
+                    ) : state.presbyterSlots > 0 ? (
+                      <Badge variant="secondary" className="py-2 px-4">✅ Todas as vagas de Presbítero preenchidas</Badge>
+                    ) : null;
+                  })()}
+                  {(() => {
+                    const deaInfo = getScrutinyInfo('diacono');
+                    return deaInfo.remainingSlots > 0 ? (
+                      <Button onClick={() => handleInitiateStartScrutiny('diacono')}
+                        disabled={state.candidates.length === 0 || state.deaconSlots === 0}
+                        className="bg-navy hover:bg-navy-light text-primary-foreground"
+                      >
+                        <Play className="w-4 h-4 mr-1" /> Iniciar Votação — Diáconos ({deaInfo.nextRound}º esc.)
+                      </Button>
+                    ) : state.deaconSlots > 0 ? (
+                      <Badge variant="secondary" className="py-2 px-4">✅ Todas as vagas de Diácono preenchidas</Badge>
+                    ) : null;
+                  })()}
+                </div>
               </div>
             )}
 
@@ -281,18 +466,31 @@ export default function Admin() {
                 <h3 className="font-semibold text-sm text-muted-foreground mb-2">Escrutínios Encerrados</h3>
                 <div className="space-y-2">
                   {state.scrutinies.filter(s => s.status === 'closed').map(s => {
-                    const sorted = Object.entries(s.votes).sort((a, b) => b[1] - a[1]);
+                    const sorted = Object.entries(s.votes)
+                      .filter(([id]) => s.participatingCandidateIds.includes(id))
+                      .sort((a, b) => b[1] - a[1]);
+                    const majorityThreshold = Math.floor(s.totalVotes / 2) + 1;
                     return (
                       <div key={s.id} className="p-3 rounded border bg-muted/50 text-sm">
-                        <p className="font-semibold">
-                          {s.type === 'presbitero' ? 'Presbíteros' : 'Diáconos'} — {s.round}º escrutínio ({s.totalVotes} votos)
+                        <div className="flex items-center justify-between mb-2">
+                          <p className="font-semibold">
+                            {s.type === 'presbitero' ? 'Presbíteros' : 'Diáconos'} — {s.round}º escrutínio ({s.totalVotes} votos)
+                          </p>
+                          {!s.resultsApproved ? (
+                            <Button size="sm" onClick={() => handleApproveResults(s.id)} className="bg-gold text-accent-foreground hover:bg-gold-light">
+                              <Eye className="w-4 h-4 mr-1" /> Aprovar e Liberar Resultado
+                            </Button>
+                          ) : (
+                            <Badge className="bg-success text-success-foreground">✓ Resultado Liberado</Badge>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground mb-2">
+                          Maioria absoluta: {majorityThreshold} votos {s.round >= 3 && '(Maioria relativa neste escrutínio)'}
                         </p>
-                        <div className="mt-2 space-y-1">
+                        <div className="space-y-1">
                           {sorted.map(([candidateId, votes]) => {
                             const c = state.candidates.find(x => x.id === candidateId);
-                            const slots = s.type === 'presbitero' ? state.presbyterSlots : state.deaconSlots;
-                            const elected = s.type === 'presbitero' ? state.electedPresbyters : state.electedDeacons;
-                            const isElected = elected.includes(candidateId);
+                            const isElected = s.electedIds.includes(candidateId);
                             return (
                               <div key={candidateId} className="flex items-center justify-between">
                                 <span className={isElected ? 'font-bold text-success' : ''}>
