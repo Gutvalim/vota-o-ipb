@@ -77,7 +77,6 @@ export default function Admin() {
   };
 
   const handleInitiateStartScrutiny = (type: ScrutinyType) => {
-    // Determine which candidates are eligible (not already elected for this type)
     const alreadyElected = type === 'presbitero' ? state.electedPresbyters : state.electedDeacons;
     const previousScrutinies = state.scrutinies.filter(s => s.type === type && s.status === 'closed');
     const lastScrutiny = previousScrutinies[previousScrutinies.length - 1];
@@ -87,7 +86,7 @@ export default function Admin() {
 
     let eligibleCandidates = state.candidates.filter(c => !alreadyElected.includes(c.id));
 
-    // 3rd scrutiny funneling: double the remaining slots
+    // REGRA DO 3º ESCRUTÍNIO (Afunilamento para o dobro de vagas restantes)
     if (nextRound >= 3 && lastScrutiny) {
       const sortedFromLast = Object.entries(lastScrutiny.votes)
         .filter(([id]) => lastScrutiny.participatingCandidateIds.includes(id) && !alreadyElected.includes(id))
@@ -98,7 +97,8 @@ export default function Admin() {
           if (!ca || !cb) return 0;
           return new Date(ca.birthDate).getTime() - new Date(cb.birthDate).getTime();
         });
-      const funnelCount = Math.min(remainingSlots * 2, sortedFromLast.length);
+        
+      const funnelCount = remainingSlots * 2;
       const funnelIds = sortedFromLast.slice(0, funnelCount).map(([id]) => id);
       eligibleCandidates = eligibleCandidates.filter(c => funnelIds.includes(c.id));
     }
@@ -135,9 +135,16 @@ export default function Admin() {
   };
 
   const handleReset = () => {
-    if (confirm('Tem certeza que deseja resetar toda a eleição? Esta ação não pode ser desfeita.')) {
+    if (confirm('Tem certeza que deseja resetar toda a eleição? Os candidatos serão mantidos, mas os votos, vagas e resultados serão zerados.')) {
       dispatch({ type: 'RESET' });
-      toast.info('Eleição resetada');
+      toast.info('Eleição resetada, candidatos mantidos.');
+    }
+  };
+
+  const handleClearCandidates = () => {
+    if (confirm('Tem certeza absoluta que deseja apagar TODOS os candidatos cadastrados? Esta ação não pode ser desfeita.')) {
+      dispatch({ type: 'CLEAR_CANDIDATES' } as any);
+      toast.info('Todos os candidatos foram apagados.');
     }
   };
 
@@ -170,7 +177,7 @@ export default function Admin() {
           </div>
           <div className="ml-auto flex gap-2">
             <Button variant="ghost" size="sm" onClick={handleReset} className="text-primary-foreground/60 hover:text-primary-foreground hover:bg-primary-foreground/10">
-              <RotateCcw className="w-4 h-4 mr-1" /> Resetar
+              <RotateCcw className="w-4 h-4 mr-1" /> Resetar Eleição
             </Button>
             <Button variant="ghost" size="sm" onClick={handleLogout} className="text-primary-foreground/60 hover:text-primary-foreground hover:bg-primary-foreground/10">
               <LogOut className="w-4 h-4 mr-1" /> Sair
@@ -267,11 +274,16 @@ export default function Admin() {
                 <Users className="w-5 h-5 text-gold" />
                 Candidatos ({state.candidates.length})
               </CardTitle>
-              <Button size="sm" onClick={() => { setShowCandidateForm(true); setEditingCandidate(null); setForm({ name: '', photo: '', birthDate: '', currentRole: 'membro' }); }}
-                disabled={isVotingOpen}
-              >
-                <UserPlus className="w-4 h-4 mr-1" /> Adicionar
-              </Button>
+              <div className="flex gap-2">
+                <Button size="sm" variant="destructive" onClick={handleClearCandidates} disabled={state.candidates.length === 0 || isVotingOpen}>
+                  <Trash2 className="w-4 h-4 mr-1" /> Apagar Todos
+                </Button>
+                <Button size="sm" onClick={() => { setShowCandidateForm(true); setEditingCandidate(null); setForm({ name: '', photo: '', birthDate: '', currentRole: 'membro' }); }}
+                  disabled={isVotingOpen}
+                >
+                  <UserPlus className="w-4 h-4 mr-1" /> Adicionar
+                </Button>
+              </div>
             </div>
           </CardHeader>
           <CardContent>
