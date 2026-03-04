@@ -25,19 +25,6 @@ export default function DataShow() {
     return () => clearInterval(interval);
   }, [isOpen, currentScrutiny?.startedAt]);
 
-  // Refresh state from localStorage periodically
-  useEffect(() => {
-    const interval = setInterval(() => {
-      try {
-        const saved = localStorage.getItem('ipb-election');
-        if (saved) {
-          window.dispatchEvent(new Event('storage'));
-        }
-      } catch {}
-    }, 2000);
-    return () => clearInterval(interval);
-  }, []);
-
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60).toString().padStart(2, '0');
     const s = (seconds % 60).toString().padStart(2, '0');
