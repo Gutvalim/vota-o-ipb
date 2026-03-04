@@ -26,9 +26,8 @@ const Index = () => {
 
         <div className="grid gap-4 sm:grid-cols-3 max-w-lg mx-auto">
           <Button
-            onClick={() => navigate('/admin')}
-            variant="outline"
-            className="h-auto py-6 flex flex-col gap-2 border-primary-foreground/20 text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground"
+            onClick={() => navigate('/login')}
+            className="h-auto py-6 flex flex-col gap-2 bg-primary-foreground/10 border border-primary-foreground/20 text-primary-foreground hover:bg-primary-foreground/20"
           >
             <Settings className="w-6 h-6" />
             <span className="text-sm font-semibold">Administração</span>
@@ -44,8 +43,7 @@ const Index = () => {
 
           <Button
             onClick={() => navigate('/datashow')}
-            variant="outline"
-            className="h-auto py-6 flex flex-col gap-2 border-primary-foreground/20 text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground"
+            className="h-auto py-6 flex flex-col gap-2 bg-primary-foreground/10 border border-primary-foreground/20 text-primary-foreground hover:bg-primary-foreground/20"
           >
             <Monitor className="w-6 h-6" />
             <span className="text-sm font-semibold">Data Show</span>

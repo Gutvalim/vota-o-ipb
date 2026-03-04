@@ -16,6 +16,14 @@ export default function Urna() {
   const isOpen = currentScrutiny?.status === 'open';
   const maxSelections = currentScrutiny?.type === 'presbitero' ? state.presbyterSlots : state.deaconSlots;
 
+  // Only show participating candidates
+  const participatingCandidates = isOpen && currentScrutiny
+    ? state.candidates.filter(c => currentScrutiny.participatingCandidateIds.includes(c.id))
+    : [];
+
+  // Check if voting goal reached (auto-closed)
+  const votingClosed = currentScrutiny && currentScrutiny.status === 'closed';
+
   const toggleCandidate = (id: string) => {
     if (hasVoted) return;
     setSelectedIds(prev => {
@@ -41,7 +49,7 @@ export default function Urna() {
     setShowConfirm(false);
   };
 
-  if (!isOpen) {
+  if (!isOpen || votingClosed) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-primary p-8">
         <Vote className="w-16 h-16 text-gold mb-6" />
@@ -49,9 +57,9 @@ export default function Urna() {
           {state.title || 'Sistema de Votação'}
         </h1>
         <p className="text-primary-foreground/60 text-lg mb-8 text-center">
-          Nenhuma votação em andamento no momento.
+          {votingClosed ? 'A votação foi encerrada. Aguarde o resultado.' : 'Nenhuma votação em andamento no momento.'}
         </p>
-        <Button variant="outline" onClick={() => navigate('/')} className="border-primary-foreground/20 text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground">
+        <Button variant="ghost" onClick={() => navigate('/')} className="text-primary-foreground/40 hover:text-primary-foreground hover:bg-primary-foreground/10">
           <ArrowLeft className="w-4 h-4 mr-2" /> Voltar
         </Button>
       </div>
@@ -77,6 +85,12 @@ export default function Urna() {
     );
   }
 
+  // Remaining slots for this scrutiny type (considering already elected)
+  const alreadyElected = currentScrutiny.type === 'presbitero' ? state.electedPresbyters : state.electedDeacons;
+  const totalSlots = currentScrutiny.type === 'presbitero' ? state.presbyterSlots : state.deaconSlots;
+  const remainingSlots = totalSlots - alreadyElected.length;
+  const effectiveMax = Math.min(maxSelections, remainingSlots);
+
   return (
     <div className="min-h-screen bg-primary flex flex-col">
       {/* Header */}
@@ -87,17 +101,17 @@ export default function Urna() {
               {currentScrutiny.type === 'presbitero' ? 'Eleição de Presbíteros' : 'Eleição de Diáconos'}
             </h1>
             <p className="text-sm text-primary-foreground/50">
-              {currentScrutiny.round}º Escrutínio — Selecione até {maxSelections} candidato(s)
+              {currentScrutiny.round}º Escrutínio — Selecione até {effectiveMax} candidato(s)
             </p>
           </div>
-          <Badge count={selectedIds.length} max={maxSelections} />
+          <VoteBadge count={selectedIds.length} max={effectiveMax} />
         </div>
       </header>
 
       {/* Candidates Grid */}
       <main className="flex-1 p-4 md:p-6 overflow-auto">
         <div className="max-w-4xl mx-auto grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-          {state.candidates.map(c => {
+          {participatingCandidates.map(c => {
             const isSelected = selectedIds.includes(c.id);
             return (
               <button
@@ -160,7 +174,7 @@ export default function Urna() {
               }}
               className="bg-gold text-accent-foreground hover:bg-gold-light text-lg px-12 py-6"
             >
-              <Vote className="w-5 h-5 mr-2" /> Votar ({selectedIds.length}/{maxSelections})
+              <Vote className="w-5 h-5 mr-2" /> Votar ({selectedIds.length}/{effectiveMax})
             </Button>
           )}
         </div>
@@ -169,7 +183,7 @@ export default function Urna() {
   );
 }
 
-function Badge({ count, max }: { count: number; max: number }) {
+function VoteBadge({ count, max }: { count: number; max: number }) {
   return (
     <div className="flex items-center gap-2 bg-primary-foreground/10 px-4 py-2 rounded-full">
       <span className="text-primary-foreground/60 text-sm">Selecionados:</span>
