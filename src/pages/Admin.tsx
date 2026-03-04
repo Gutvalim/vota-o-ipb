@@ -27,19 +27,17 @@ export default function Admin() {
   const { currentUser, users, logout, approveUser, rejectUser } = useAuth();
   const navigate = useNavigate();
 
+  const [showCandidateForm, setShowCandidateForm] = useState(false);
+  const [editingCandidate, setEditingCandidate] = useState<Candidate | null>(null);
+  const [form, setForm] = useState({ name: '', photo: '', birthDate: '', currentRole: 'membro' as CandidateRole });
+  const [startingScrutinyType, setStartingScrutinyType] = useState<ScrutinyType | null>(null);
+  const [selectedParticipants, setSelectedParticipants] = useState<string[]>([]);
+
   // Auth guard
   if (!currentUser) {
     navigate('/login');
     return null;
   }
-
-  const [showCandidateForm, setShowCandidateForm] = useState(false);
-  const [editingCandidate, setEditingCandidate] = useState<Candidate | null>(null);
-  const [form, setForm] = useState({ name: '', photo: '', birthDate: '', currentRole: 'membro' as CandidateRole });
-
-  // Scrutiny start flow
-  const [startingScrutinyType, setStartingScrutinyType] = useState<ScrutinyType | null>(null);
-  const [selectedParticipants, setSelectedParticipants] = useState<string[]>([]);
 
   const currentScrutiny = state.scrutinies.find(s => s.id === state.currentScrutinyId);
   const isVotingOpen = currentScrutiny?.status === 'open';
