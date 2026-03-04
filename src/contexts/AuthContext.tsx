@@ -1,15 +1,27 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { initializeApp, getApps, getApp } from "firebase/app";
+import { getFirestore, doc, setDoc, onSnapshot } from "firebase/firestore";
+
+// 1. INICIALIZAÇÃO DO FIREBASE (Igual ao ElectionContext)
+const firebaseConfig = {
+  apiKey: "AIzaSyD5lSgqKvXFZBK8-PalruztaoZliXxT8GE",
+  authDomain: "eleicao-ipb.firebaseapp.com",
+  projectId: "eleicao-ipb",
+  storageBucket: "eleicao-ipb.firebasestorage.app",
+  messagingSenderId: "1072551138226",
+  appId: "1:1072551138226:web:24b2aa1109e5bdb0c10aab"
+};
+
+// Usa o getApps() para evitar erro de "app já inicializado" caso o site recarregue rápido
+const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+const db = getFirestore(app);
+const AUTH_DOC_ID = 'main';
 
 export interface AppUser {
   username: string;
   password: string;
   approved: boolean;
   isAdmin: boolean;
-}
-
-interface AuthState {
-  currentUser: AppUser | null;
-  users: AppUser[];
 }
 
 interface AuthContextType {
@@ -22,72 +34,111 @@ interface AuthContextType {
   rejectUser: (username: string) => void;
 }
 
-const STORAGE_KEY = 'ipb-auth';
+const STORAGE_KEY_CURRENT_USER = 'ipb-auth-current';
 
+// Usuário Mestre que nunca pode ser apagado
 const defaultUsers: AppUser[] = [
   { username: 'ipbnb', password: 'luterocalvino', approved: true, isAdmin: true },
 ];
 
-function loadState(): AuthState {
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      // Ensure default user always exists
-      const hasDefault = parsed.users?.some((u: AppUser) => u.username === 'ipbnb');
-      if (!hasDefault) {
-        parsed.users = [...defaultUsers, ...(parsed.users || [])];
-      }
-      return parsed;
-    }
-  } catch {}
-  return { currentUser: null, users: [...defaultUsers] };
-}
-
 const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<AuthState>(loadState);
+  // O usuário logado atualmente fica no navegador (para não deslogar ao atualizar a página)
+  const [currentUser, setCurrentUser] = useState<AppUser | null>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_CURRENT_USER);
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
 
+  // A lista de todos os usuários cadastrados vem do Firebase
+  const [users, setUsers] = useState<AppUser[]>([]);
+
+  // Sincronização da lista de usuários com o Firebase
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  }, [state]);
+    const docRef = doc(db, 'auth', AUTH_DOC_ID);
+    
+    const unsubscribe = onSnapshot(docRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.data();
+        let cloudUsers: AppUser[] = data.users || [];
+        
+        // Garante que o usuário mestre sempre exista
+        const hasDefault = cloudUsers.some(u => u.username === 'ipbnb');
+        if (!hasDefault) {
+          cloudUsers = [...defaultUsers, ...cloudUsers];
+          setDoc(docRef, { users: cloudUsers }); // Salva a correção na nuvem
+        }
+        
+        setUsers(cloudUsers);
+      } else {
+        // Se for a primeira vez criando o banco de Auth
+        setDoc(docRef, { users: defaultUsers });
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  // Mantém a sessão atual salva localmente
+  useEffect(() => {
+    if (currentUser) {
+      localStorage.setItem(STORAGE_KEY_CURRENT_USER, JSON.stringify(currentUser));
+    } else {
+      localStorage.removeItem(STORAGE_KEY_CURRENT_USER);
+    }
+  }, [currentUser]);
+
+  // Função para salvar a lista inteira na nuvem sempre que houver alteração
+  const syncUsersToCloud = async (newUsersList: AppUser[]) => {
+    await setDoc(doc(db, 'auth', AUTH_DOC_ID), { users: newUsersList });
+  };
 
   const login = (username: string, password: string) => {
-    const user = state.users.find(u => u.username === username && u.password === password);
+    const user = users.find(u => u.username === username && u.password === password);
     if (!user) return { success: false, message: 'Usuário ou senha incorretos.' };
     if (!user.approved) return { success: false, message: 'Seu cadastro ainda não foi aprovado por um administrador.' };
-    setState(s => ({ ...s, currentUser: user }));
+    
+    setCurrentUser(user);
     return { success: true, message: '' };
   };
 
   const register = (username: string, password: string) => {
     if (username.length < 3) return { success: false, message: 'Usuário deve ter pelo menos 3 caracteres.' };
     if (password.length < 6) return { success: false, message: 'Senha deve ter pelo menos 6 caracteres.' };
-    if (state.users.some(u => u.username === username)) return { success: false, message: 'Este usuário já existe.' };
+    if (users.some(u => u.username === username)) return { success: false, message: 'Este usuário já existe.' };
+    
     const newUser: AppUser = { username, password, approved: false, isAdmin: false };
-    setState(s => ({ ...s, users: [...s.users, newUser] }));
+    const updatedUsers = [...users, newUser];
+    
+    // Atualiza localmente e joga para a nuvem
+    setUsers(updatedUsers);
+    syncUsersToCloud(updatedUsers);
+    
     return { success: true, message: 'Cadastro realizado! Aguarde aprovação do administrador.' };
   };
 
-  const logout = () => setState(s => ({ ...s, currentUser: null }));
+  const logout = () => {
+    setCurrentUser(null);
+  };
 
   const approveUser = (username: string) => {
-    setState(s => ({
-      ...s,
-      users: s.users.map(u => u.username === username ? { ...u, approved: true } : u),
-    }));
+    const updatedUsers = users.map(u => u.username === username ? { ...u, approved: true } : u);
+    setUsers(updatedUsers);
+    syncUsersToCloud(updatedUsers);
   };
 
   const rejectUser = (username: string) => {
-    setState(s => ({
-      ...s,
-      users: s.users.filter(u => u.username !== username),
-    }));
+    const updatedUsers = users.filter(u => u.username !== username);
+    setUsers(updatedUsers);
+    syncUsersToCloud(updatedUsers);
   };
 
   return (
-    <AuthContext.Provider value={{ currentUser: state.currentUser, users: state.users, login, register, logout, approveUser, rejectUser }}>
+    <AuthContext.Provider value={{ currentUser, users, login, register, logout, approveUser, rejectUser }}>
       {children}
     </AuthContext.Provider>
   );
