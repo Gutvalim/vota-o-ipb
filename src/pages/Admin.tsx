@@ -84,9 +84,15 @@ export default function Admin() {
     const remainingSlots = slots - alreadyElected.length;
     const nextRound = previousScrutinies.length + 1;
 
+    // 1. Pega todos que ainda não foram eleitos
     let eligibleCandidates = state.candidates.filter(c => !alreadyElected.includes(c.id));
 
-    // REGRA DO 3º ESCRUTÍNIO (Afunilamento para o dobro de vagas restantes)
+    // 2. NOVA REGRA: A partir do 2º escrutínio, mantém apenas quem já estava concorrendo no anterior
+    if (lastScrutiny) {
+      eligibleCandidates = eligibleCandidates.filter(c => lastScrutiny.participatingCandidateIds.includes(c.id));
+    }
+
+    // 3. REGRA DO 3º ESCRUTÍNIO (Afunilamento para o dobro de vagas restantes)
     if (nextRound >= 3 && lastScrutiny) {
       const sortedFromLast = Object.entries(lastScrutiny.votes)
         .filter(([id]) => lastScrutiny.participatingCandidateIds.includes(id) && !alreadyElected.includes(id))
@@ -103,6 +109,7 @@ export default function Admin() {
       eligibleCandidates = eligibleCandidates.filter(c => funnelIds.includes(c.id));
     }
 
+    // Define os participantes que virão com a "caixinha" já marcada automaticamente
     setSelectedParticipants(eligibleCandidates.map(c => c.id));
     setStartingScrutinyType(type);
   };
