@@ -14,22 +14,27 @@ export default function Urna() {
 
   const currentScrutiny = state.scrutinies.find(s => s.id === state.currentScrutinyId);
   const isOpen = currentScrutiny?.status === 'open';
-  const maxSelections = currentScrutiny?.type === 'presbitero' ? state.presbyterSlots : state.deaconSlots;
 
-  // Only show participating candidates
+  // LÓGICA CORRIGIDA: Calcula exatamente as vagas RESTANTES para limitar os cliques
+  const alreadyElected = currentScrutiny?.type === 'presbitero' ? state.electedPresbyters : state.electedDeacons;
+  const totalSlots = currentScrutiny?.type === 'presbitero' ? state.presbyterSlots : state.deaconSlots;
+  const effectiveMax = currentScrutiny ? (totalSlots - (alreadyElected?.length || 0)) : 0;
+
+  // Mostra apenas os candidatos participantes da rodada atual
   const participatingCandidates = isOpen && currentScrutiny
     ? state.candidates.filter(c => currentScrutiny.participatingCandidateIds.includes(c.id))
     : [];
 
-  // Check if voting goal reached (auto-closed)
+  // Checa se a meta de votos foi atingida (fechamento automático)
   const votingClosed = currentScrutiny && currentScrutiny.status === 'closed';
 
   const toggleCandidate = (id: string) => {
     if (hasVoted) return;
     setSelectedIds(prev => {
       if (prev.includes(id)) return prev.filter(x => x !== id);
-      if (prev.length >= maxSelections) {
-        toast.error(`Selecione no máximo ${maxSelections} candidato(s)`);
+      // Aqui aplicamos o limite dinâmico das vagas que sobraram
+      if (prev.length >= effectiveMax) {
+        toast.error(`Selecione no máximo ${effectiveMax} candidato(s)`);
         return prev;
       }
       return [...prev, id];
@@ -84,12 +89,6 @@ export default function Urna() {
       </div>
     );
   }
-
-  // Remaining slots for this scrutiny type (considering already elected)
-  const alreadyElected = currentScrutiny.type === 'presbitero' ? state.electedPresbyters : state.electedDeacons;
-  const totalSlots = currentScrutiny.type === 'presbitero' ? state.presbyterSlots : state.deaconSlots;
-  const remainingSlots = totalSlots - alreadyElected.length;
-  const effectiveMax = Math.min(maxSelections, remainingSlots);
 
   return (
     <div className="min-h-screen bg-primary flex flex-col">
