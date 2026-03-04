@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useElection } from '@/contexts/ElectionContext';
-import { Vote, Users, Clock, Trophy } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Button } from '@/components/ui/button';
+import { Vote, Users, Clock, Trophy, ArrowLeft } from 'lucide-react';
 
 export default function DataShow() {
-  const { state, resolveScrutinyResults } = useElection();
+  const { state } = useElection();
+  const navigate = useNavigate();
   const [elapsed, setElapsed] = useState(0);
 
   const currentScrutiny = state.scrutinies.find(s => s.id === state.currentScrutinyId);
@@ -38,10 +41,22 @@ export default function DataShow() {
   // Check if there's a closed but not yet approved scrutiny
   const pendingApproval = state.scrutinies.find(s => s.status === 'closed' && !s.resultsApproved);
 
+  // Botão de voltar discreto para o operador
+  const BackButton = () => (
+    <Button
+      variant="ghost"
+      onClick={() => navigate('/')}
+      className="absolute top-4 left-4 text-primary-foreground/30 hover:text-primary-foreground hover:bg-primary-foreground/10 z-50 transition-colors"
+    >
+      <ArrowLeft className="w-5 h-5 mr-2" /> Voltar
+    </Button>
+  );
+
   // WAITING STATE
   if (!isOpen && !latestApproved && !pendingApproval) {
     return (
-      <div className="min-h-screen bg-primary flex flex-col items-center justify-center p-8">
+      <div className="min-h-screen bg-primary relative flex flex-col items-center justify-center p-8">
+        <BackButton />
         <Vote className="w-20 h-20 text-gold mb-8" />
         <h1 className="text-5xl font-display font-bold text-primary-foreground mb-4 text-center">
           {state.title || 'Sistema de Votação Eletrônica'}
@@ -62,7 +77,8 @@ export default function DataShow() {
   // VOTING IN PROGRESS
   if (isOpen && currentScrutiny) {
     return (
-      <div className="min-h-screen bg-primary flex flex-col p-8">
+      <div className="min-h-screen bg-primary relative flex flex-col p-8">
+        <BackButton />
         <div className="text-center mb-12">
           <h1 className="text-4xl font-display font-bold text-primary-foreground mb-2">
             {state.title || 'Votação em Andamento'}
@@ -102,22 +118,23 @@ export default function DataShow() {
         </div>
 
         <p className="text-center text-primary-foreground/20 text-sm">
-          Os resultados serão exibidos após o encerramento e aprovação pelo administrador
+          Os resultados serão exibidos após o encerramento e apuração pelo administrador
         </p>
       </div>
     );
   }
 
   // PENDING APPROVAL (closed but not approved)
-  if (pendingApproval && !latestApproved) {
+  if (pendingApproval) {
     return (
-      <div className="min-h-screen bg-primary flex flex-col items-center justify-center p-8">
-        <Vote className="w-20 h-20 text-gold mb-8" />
+      <div className="min-h-screen bg-primary relative flex flex-col items-center justify-center p-8">
+        <BackButton />
+        <Vote className="w-20 h-20 text-gold mb-8 animate-pulse" />
         <h1 className="text-4xl font-display font-bold text-primary-foreground mb-4 text-center">
           Votação Encerrada
         </h1>
         <p className="text-xl text-primary-foreground/50 mt-4">
-          Aguardando aprovação do resultado pelo administrador...
+          Aguardando apuração do resultado...
         </p>
       </div>
     );
@@ -125,11 +142,6 @@ export default function DataShow() {
 
   // RESULTS (only approved)
   if (latestApproved) {
-    const alreadyElectedBefore = latestApproved.type === 'presbitero'
-      ? state.electedPresbyters.filter(id => !latestApproved.electedIds.includes(id))
-      : state.electedDeacons.filter(id => !latestApproved.electedIds.includes(id));
-    const slots = latestApproved.type === 'presbitero' ? state.presbyterSlots : state.deaconSlots;
-
     const sortedEntries = Object.entries(latestApproved.votes)
       .filter(([id]) => latestApproved.participatingCandidateIds.includes(id))
       .sort((a, b) => {
@@ -141,7 +153,8 @@ export default function DataShow() {
       });
 
     return (
-      <div className="min-h-screen bg-primary flex flex-col p-8">
+      <div className="min-h-screen bg-primary relative flex flex-col p-8">
+        <BackButton />
         <div className="text-center mb-8">
           <Trophy className="w-12 h-12 text-gold mx-auto mb-4" />
           <h1 className="text-4xl font-display font-bold text-primary-foreground mb-2">
