@@ -66,6 +66,7 @@ type Action =
   | { type: 'ADD_ALERT'; payload: string }
   | { type: 'CLEAR_ALERTS' }
   | { type: 'SET_ELECTED'; payload: { type: ScrutinyType; candidateIds: string[] } }
+  | { type: 'CLEAR_CANDIDATES' }
   | { type: 'RESET' };
 
 export function resolveResults(
@@ -74,14 +75,19 @@ export function resolveResults(
   slots: number,
   alreadyElected: string[] = []
 ): { elected: string[]; tied: boolean } {
+  // Quantas vagas ainda precisam ser preenchidas nesta rodada
   const remainingSlots = slots - alreadyElected.length;
   if (remainingSlots <= 0) return { elected: [], tied: false };
 
+  // Maioria Absoluta: 50% + 1 dos votos totais da rodada
   const majorityThreshold = Math.floor(scrutiny.totalVotes / 2) + 1;
+  
+  // A partir do 3º escrutínio, a regra muda para Maioria Relativa
   const isThirdOrLater = scrutiny.round >= 3;
 
+  // Filtra e ordena os candidatos pelos votos
   const entries = Object.entries(scrutiny.votes)
-    .filter(([id]) => scrutiny.participatingCandidateIds.includes(id))
+    .filter(([id]) => scrutiny.participatingCandidateIds.includes(id)) // Pega só quem participou desta rodada
     .map(([id, count]) => ({
       id,
       count,
@@ -89,21 +95,25 @@ export function resolveResults(
     }))
     .filter(e => e.candidate)
     .sort((a, b) => {
+      // 1º Critério: Número de votos (Decrescente)
       if (b.count !== a.count) return b.count - a.count;
+      
+      // 2º Critério (Desempate CI/IPB): Idade (Mais velho ganha)
       const dateA = new Date(a.candidate.birthDate).getTime();
       const dateB = new Date(b.candidate.birthDate).getTime();
-      return dateA - dateB;
+      return dateA - dateB; 
     });
 
   let elected: string[];
+  
   if (isThirdOrLater) {
-    // 3rd scrutiny: relative majority
+    // 3º Escrutínio em diante: Maioria Relativa (ganha quem tem mais voto)
     elected = entries.slice(0, remainingSlots).map(e => e.id);
   } else {
-    // 1st and 2nd: need absolute majority
+    // 1º e 2º Escrutínio: Exige Maioria Absoluta
     elected = entries
       .filter(e => e.count >= majorityThreshold)
-      .slice(0, remainingSlots)
+      .slice(0, remainingSlots) // Limita ao número de vagas restantes
       .map(e => e.id);
   }
 
@@ -259,8 +269,12 @@ function reducer(state: ElectionState, action: Action): ElectionState {
       }
       return { ...state, electedDeacons: action.payload.candidateIds };
 
+    case 'CLEAR_CANDIDATES':
+      return { ...state, candidates: [] };
+
     case 'RESET':
-      return initialState;
+      // Retorna o estado inicial (zerando votos/vagas), mas preserva o array de candidatos
+      return { ...initialState, candidates: state.candidates };
 
     default:
       return state;
