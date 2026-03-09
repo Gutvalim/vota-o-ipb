@@ -34,8 +34,8 @@ export interface Scrutiny {
   round: number;
   status: ScrutinyStatus;
   votes: Record<string, number>;
-  totalVotes: number;
-  blankVotes: number; // NOVO: Contador de votos em branco
+  totalVotes: number; // Quantidade de eleitores que votaram
+  blankVotes: number; // Soma de todos os votos não preenchidos (em branco)
   startedAt?: number;
   participatingCandidateIds: string[];
   resultsApproved: boolean;
@@ -166,7 +166,6 @@ function reducer(state: ElectionState, action: Action): ElectionState {
       const targetScrutiny = state.scrutinies.find(s => s.id === scrutinyId);
       if (!targetScrutiny) return state;
 
-      // Se já estava fechado, removemos os eleitos desta rodada das listas globais
       let updatedPresbyters = [...state.electedPresbyters];
       let updatedDeacons = [...state.electedDeacons];
       
@@ -195,13 +194,24 @@ function reducer(state: ElectionState, action: Action): ElectionState {
     case 'CAST_VOTE': {
       const scrutinies = state.scrutinies.map(s => {
         if (s.id !== action.payload.scrutinyId) return s;
+        
         const newVotes = { ...s.votes };
         action.payload.candidateIds.forEach(id => {
           newVotes[id] = (newVotes[id] || 0) + 1;
         });
+        
         const newTotal = s.totalVotes + 1;
-        const isBlank = action.payload.candidateIds.length === 0;
-        const newBlankVotes = (s.blankVotes || 0) + (isBlank ? 1 : 0);
+        
+        // NOVA LÓGICA DE CÁLCULO DE VOTOS EM BRANCO
+        // Descobre quantas vagas esse eleitor tinha direito de preencher
+        const alreadyElected = s.type === 'presbitero' ? state.electedPresbyters : state.electedDeacons;
+        const totalSlots = s.type === 'presbitero' ? state.presbyterSlots : state.deaconSlots;
+        const effectiveMax = totalSlots - alreadyElected.length;
+        
+        // A diferença entre as vagas disponíveis e os candidatos que ele escolheu é o voto em branco
+        const blankVotesToAdd = Math.max(0, effectiveMax - action.payload.candidateIds.length);
+        const newBlankVotes = (s.blankVotes || 0) + blankVotesToAdd;
+        
         const shouldClose = state.voterGoal > 0 && newTotal >= state.voterGoal;
         return { ...s, votes: newVotes, totalVotes: newTotal, blankVotes: newBlankVotes, status: shouldClose ? 'closed' as const : s.status };
       });
