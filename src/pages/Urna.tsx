@@ -69,7 +69,11 @@ export default function Urna() {
     setSelectedIds(prev => {
       if (prev.includes(id)) return prev.filter(x => x !== id);
       if (prev.length >= effectiveMax) {
-        toast.error(`Selecione no máximo ${effectiveMax} candidato(s)`);
+        // AVISO AGORA APARECE NO TOPO DA TELA
+        toast.error(`Você só pode selecionar até ${effectiveMax} candidato(s)`, {
+          position: 'top-center',
+          duration: 3500, // Fica na tela por 3,5 segundos
+        });
         return prev;
       }
       return [...prev, id];
@@ -149,7 +153,6 @@ export default function Urna() {
         </div>
       </header>
 
-      {/* Grid refeito com Flexbox para sempre centralizar os candidatos, inclusive a última linha */}
       <main className="flex-1 flex flex-col items-center justify-center p-2 md:p-4 overflow-y-auto">
         <div className="w-full max-w-7xl flex flex-wrap justify-center gap-3 md:gap-5">
           {participatingCandidates.map(c => {
