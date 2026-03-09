@@ -5,7 +5,6 @@ import { Button } from '@/components/ui/button';
 import { ArrowLeft, CheckCircle2, Vote, Users } from 'lucide-react';
 import { toast } from 'sonner';
 
-// Função que sintetiza um som de sucesso suave (Toque duplo ascendente)
 const playConfirmSound = () => {
   try {
     const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
@@ -14,7 +13,6 @@ const playConfirmSound = () => {
     const audioCtx = new AudioContextClass();
     const now = audioCtx.currentTime;
 
-    // Função interna para tocar uma nota musical
     const playNote = (frequency: number, startTime: number, duration: number) => {
       const oscillator = audioCtx.createOscillator();
       const gainNode = audioCtx.createGain();
@@ -22,11 +20,9 @@ const playConfirmSound = () => {
       oscillator.connect(gainNode);
       gainNode.connect(audioCtx.destination);
 
-      // Onda 'triangle' gera um som mais suave, parecido com um sino de vidro
       oscillator.type = 'triangle';
       oscillator.frequency.value = frequency;
 
-      // Controle de volume (Envelope): sobe rápido e cai suavemente
       gainNode.gain.setValueAtTime(0, startTime);
       gainNode.gain.linearRampToValueAtTime(0.3, startTime + 0.05);
       gainNode.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
@@ -35,9 +31,8 @@ const playConfirmSound = () => {
       oscillator.stop(startTime + duration);
     };
 
-    // Toca um acorde de confirmação (Dó seguido de Mi)
-    playNote(523.25, now, 0.3);        // Nota 1 (C5)
-    playNote(659.25, now + 0.15, 0.4); // Nota 2 (E5) um pouquinho depois e mais alta
+    playNote(523.25, now, 0.3);
+    playNote(659.25, now + 0.15, 0.4);
 
   } catch (error) {
     console.error("Erro ao reproduzir o som de confirmação", error);
@@ -58,7 +53,6 @@ export default function Urna() {
   const totalSlots = currentScrutiny?.type === 'presbitero' ? state.presbyterSlots : state.deaconSlots;
   const effectiveMax = currentScrutiny ? (totalSlots - (alreadyElected?.length || 0)) : 0;
 
-  // Filtra quem participa e ORDENA EM ORDEM ALFABÉTICA
   const participatingCandidates = isOpen && currentScrutiny
     ? state.candidates
         .filter(c => currentScrutiny.participatingCandidateIds.includes(c.id))
@@ -66,7 +60,9 @@ export default function Urna() {
     : [];
 
   const votingClosed = currentScrutiny && currentScrutiny.status === 'closed';
-  const isBlankVote = selectedIds.length === 0;
+  
+  // Cálculo de votos em branco para exibir a mensagem correta na tela
+  const blankCount = effectiveMax - selectedIds.length;
 
   const toggleCandidate = (id: string) => {
     if (hasVoted) return;
@@ -83,7 +79,6 @@ export default function Urna() {
   const handleConfirm = () => {
     if (!currentScrutiny) return;
     
-    // Toca o novo som de confirmação
     playConfirmSound();
 
     dispatch({ type: 'CAST_VOTE', payload: { scrutinyId: currentScrutiny.id, candidateIds: selectedIds } });
@@ -135,7 +130,6 @@ export default function Urna() {
 
   return (
     <div className="h-screen bg-primary flex flex-col overflow-hidden">
-      {/* Header Compacto */}
       <header className="shrink-0 p-3 md:p-4 border-b border-primary-foreground/10">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div>
@@ -155,7 +149,6 @@ export default function Urna() {
         </div>
       </header>
 
-      {/* Grid de Candidatos */}
       <main className="flex-1 flex flex-col items-center justify-center p-2 md:p-4">
         <div className="w-full max-w-7xl grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 md:gap-4">
           {participatingCandidates.map(c => {
@@ -195,13 +188,17 @@ export default function Urna() {
         </div>
       </main>
 
-      {/* Footer Fixo */}
       <footer className="shrink-0 p-3 md:p-5 border-t border-primary-foreground/10 bg-primary/95 backdrop-blur shadow-[0_-10px_30px_rgba(0,0,0,0.3)]">
         <div className="max-w-7xl mx-auto flex justify-center items-center h-full">
           {showConfirm ? (
             <div className="w-full flex flex-col sm:flex-row items-center justify-between gap-4">
-              <p className="text-primary-foreground font-display font-bold text-2xl md:text-3xl text-center">
-                {isBlankVote ? 'Confirmar VOTO EM BRANCO?' : `Confirmar voto em ${selectedIds.length} candidato(s)?`}
+              <p className="text-primary-foreground font-display font-bold text-xl md:text-3xl text-center">
+                {selectedIds.length === 0 
+                  ? `Confirmar ${blankCount} VOTO(S) EM BRANCO?`
+                  : blankCount > 0 
+                    ? `Confirmar ${selectedIds.length} candidato(s) e ${blankCount} VOTO(S) EM BRANCO?`
+                    : `Confirmar voto em ${selectedIds.length} candidato(s)?`
+                }
               </p>
               <div className="flex gap-4 w-full sm:w-auto">
                 <Button variant="ghost" onClick={() => setShowConfirm(false)} className="flex-1 sm:flex-none text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground text-xl md:text-2xl py-8 px-6">
@@ -217,11 +214,11 @@ export default function Urna() {
               onClick={() => setShowConfirm(true)}
               className={`
                 w-full md:w-auto font-bold text-2xl md:text-4xl px-8 py-8 md:px-24 md:py-10 shadow-xl transition-all
-                ${isBlankVote ? 'bg-secondary text-secondary-foreground hover:bg-secondary/80' : 'bg-gold text-accent-foreground hover:bg-gold-light'}
+                ${selectedIds.length === 0 ? 'bg-secondary text-secondary-foreground hover:bg-secondary/80' : 'bg-gold text-accent-foreground hover:bg-gold-light'}
               `}
             >
-              {isBlankVote ? (
-                'VOTAR EM BRANCO'
+              {selectedIds.length === 0 ? (
+                `VOTAR EM BRANCO (${blankCount})`
               ) : (
                 <><Vote className="w-8 h-8 md:w-10 md:h-10 mr-3" /> VOTAR ({selectedIds.length}/{effectiveMax})</>
               )}
