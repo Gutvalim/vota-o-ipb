@@ -5,6 +5,45 @@ import { Button } from '@/components/ui/button';
 import { ArrowLeft, CheckCircle2, Vote, Users } from 'lucide-react';
 import { toast } from 'sonner';
 
+// Função que sintetiza um som de sucesso suave (Toque duplo ascendente)
+const playConfirmSound = () => {
+  try {
+    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContextClass) return;
+    
+    const audioCtx = new AudioContextClass();
+    const now = audioCtx.currentTime;
+
+    // Função interna para tocar uma nota musical
+    const playNote = (frequency: number, startTime: number, duration: number) => {
+      const oscillator = audioCtx.createOscillator();
+      const gainNode = audioCtx.createGain();
+
+      oscillator.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+
+      // Onda 'triangle' gera um som mais suave, parecido com um sino de vidro
+      oscillator.type = 'triangle';
+      oscillator.frequency.value = frequency;
+
+      // Controle de volume (Envelope): sobe rápido e cai suavemente
+      gainNode.gain.setValueAtTime(0, startTime);
+      gainNode.gain.linearRampToValueAtTime(0.3, startTime + 0.05);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+
+      oscillator.start(startTime);
+      oscillator.stop(startTime + duration);
+    };
+
+    // Toca um acorde de confirmação (Dó seguido de Mi)
+    playNote(523.25, now, 0.3);        // Nota 1 (C5)
+    playNote(659.25, now + 0.15, 0.4); // Nota 2 (E5) um pouquinho depois e mais alta
+
+  } catch (error) {
+    console.error("Erro ao reproduzir o som de confirmação", error);
+  }
+};
+
 export default function Urna() {
   const { state, dispatch } = useElection();
   const navigate = useNavigate();
@@ -43,7 +82,10 @@ export default function Urna() {
 
   const handleConfirm = () => {
     if (!currentScrutiny) return;
-    // O backend já entende que candidateIds vazio [] = Voto em Branco (soma no total, mas pra ninguém)
+    
+    // Toca o novo som de confirmação
+    playConfirmSound();
+
     dispatch({ type: 'CAST_VOTE', payload: { scrutinyId: currentScrutiny.id, candidateIds: selectedIds } });
     setHasVoted(true);
     setShowConfirm(false);
@@ -113,7 +155,7 @@ export default function Urna() {
         </div>
       </header>
 
-      {/* Grid de Candidatos (Sem rolagem vertical forçada, distribuído automaticamente) */}
+      {/* Grid de Candidatos */}
       <main className="flex-1 flex flex-col items-center justify-center p-2 md:p-4">
         <div className="w-full max-w-7xl grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 md:gap-4">
           {participatingCandidates.map(c => {
@@ -153,7 +195,7 @@ export default function Urna() {
         </div>
       </main>
 
-      {/* Footer Fixo e Gigante */}
+      {/* Footer Fixo */}
       <footer className="shrink-0 p-3 md:p-5 border-t border-primary-foreground/10 bg-primary/95 backdrop-blur shadow-[0_-10px_30px_rgba(0,0,0,0.3)]">
         <div className="max-w-7xl mx-auto flex justify-center items-center h-full">
           {showConfirm ? (
