@@ -130,11 +130,10 @@ export default function Admin() {
     toast.success('Votação encerrada');
   };
 
-  const handleRestartScrutiny = () => {
-    if (!state.currentScrutinyId) return;
-    if (confirm('Tem certeza? Isso vai apagar TODOS os votos computados nesta rodada atual da urna!')) {
-      dispatch({ type: 'RESTART_SCRUTINY', payload: state.currentScrutinyId });
-      toast.info('A rodada atual foi reiniciada. Urnas liberadas.');
+  const handleRestartScrutiny = (scrutinyId: string) => {
+    if (confirm('Atenção: Isso vai APAGAR TODOS os votos computados neste escrutínio e reabrir a votação! Deseja continuar?')) {
+      dispatch({ type: 'RESTART_SCRUTINY', payload: scrutinyId });
+      toast.info('O escrutínio foi reiniciado e as urnas reabertas.');
     }
   };
 
@@ -365,7 +364,7 @@ export default function Admin() {
                   <Button variant="destructive" size="sm" onClick={handleCloseScrutiny}>
                     <Square className="w-4 h-4 mr-1" /> Encerrar Votação
                   </Button>
-                  <Button variant="outline" size="sm" onClick={handleRestartScrutiny} className="border-destructive text-destructive hover:bg-destructive/10">
+                  <Button variant="outline" size="sm" onClick={() => handleRestartScrutiny(currentScrutiny.id)} className="border-destructive text-destructive hover:bg-destructive/10">
                     <RotateCcw className="w-4 h-4 mr-1" /> Reiniciar Escrutínio Atual
                   </Button>
                 </div>
@@ -393,17 +392,25 @@ export default function Admin() {
               <div className="mt-4">
                 <h3 className="font-semibold text-sm text-muted-foreground mb-2">Escrutínios Encerrados</h3>
                 <div className="space-y-2">
-                  {state.scrutinies.filter(s => s.status === 'closed').map(s => {
+                  {state.scrutinies.filter(s => s.status === 'closed').reverse().map(s => {
                     const sorted = Object.entries(s.votes).filter(([id]) => s.participatingCandidateIds.includes(id)).sort((a, b) => b[1] - a[1]);
                     return (
                       <div key={s.id} className="p-3 rounded border bg-muted/50 text-sm">
                         <div className="flex items-center justify-between mb-2">
                           <p className="font-semibold">{s.type === 'presbitero' ? 'Presbíteros' : 'Diáconos'} — {s.round}º escrutínio ({s.totalVotes} votos)</p>
-                          {!s.resultsApproved ? (
-                            <Button size="sm" onClick={() => handleApproveResults(s.id)} className="bg-gold text-accent-foreground hover:bg-gold-light">
-                              <Eye className="w-4 h-4 mr-1" /> Aprovar Resultado
-                            </Button>
-                          ) : <Badge className="bg-success text-success-foreground">✓ Liberado</Badge>}
+                          <div className="flex items-center gap-2">
+                            {/* NOVO: Botão para reiniciar escrutínio fechado */}
+                            {!isVotingOpen && (
+                              <Button variant="outline" size="sm" onClick={() => handleRestartScrutiny(s.id)} className="text-destructive border-destructive hover:bg-destructive/10">
+                                <RotateCcw className="w-4 h-4 mr-1" /> Reiniciar
+                              </Button>
+                            )}
+                            {!s.resultsApproved ? (
+                              <Button size="sm" onClick={() => handleApproveResults(s.id)} className="bg-gold text-accent-foreground hover:bg-gold-light">
+                                <Eye className="w-4 h-4 mr-1" /> Aprovar Resultado
+                              </Button>
+                            ) : <Badge className="bg-success text-success-foreground">✓ Liberado</Badge>}
+                          </div>
                         </div>
                         <div className="space-y-1">
                           {sorted.map(([cId, v]) => (
@@ -412,6 +419,11 @@ export default function Admin() {
                               <span className="font-mono">{v} votos</span>
                             </div>
                           ))}
+                          {/* Exibe votos em branco no painel */}
+                          <div className="flex justify-between mt-2 pt-2 border-t border-muted-foreground/20">
+                            <span className="font-semibold text-muted-foreground">Votos em Branco</span>
+                            <span className="font-mono text-muted-foreground">{s.blankVotes || 0} votos</span>
+                          </div>
                         </div>
                       </div>
                     );
