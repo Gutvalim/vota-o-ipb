@@ -33,7 +33,6 @@ export default function Admin() {
   const [startingScrutinyType, setStartingScrutinyType] = useState<ScrutinyType | null>(null);
   const [selectedParticipants, setSelectedParticipants] = useState<string[]>([]);
 
-  // Auth guard
   if (!currentUser) {
     navigate('/login');
     return null;
@@ -41,7 +40,6 @@ export default function Admin() {
 
   const currentScrutiny = state.scrutinies.find(s => s.id === state.currentScrutinyId);
   const isVotingOpen = currentScrutiny?.status === 'open';
-
   const pendingUsers = users.filter(u => !u.approved);
 
   const handleSaveElection = (field: string, value: string | number) => {
@@ -84,15 +82,12 @@ export default function Admin() {
     const remainingSlots = slots - alreadyElected.length;
     const nextRound = previousScrutinies.length + 1;
 
-    // 1. Pega todos que ainda não foram eleitos
     let eligibleCandidates = state.candidates.filter(c => !alreadyElected.includes(c.id));
 
-    // 2. NOVA REGRA: A partir do 2º escrutínio, mantém apenas quem já estava concorrendo no anterior
     if (lastScrutiny) {
       eligibleCandidates = eligibleCandidates.filter(c => lastScrutiny.participatingCandidateIds.includes(c.id));
     }
 
-    // 3. REGRA DO 3º ESCRUTÍNIO (Afunilamento para o dobro de vagas restantes)
     if (nextRound >= 3 && lastScrutiny) {
       const sortedFromLast = Object.entries(lastScrutiny.votes)
         .filter(([id]) => lastScrutiny.participatingCandidateIds.includes(id) && !alreadyElected.includes(id))
@@ -109,7 +104,6 @@ export default function Admin() {
       eligibleCandidates = eligibleCandidates.filter(c => funnelIds.includes(c.id));
     }
 
-    // Define os participantes que virão com a "caixinha" já marcada automaticamente
     setSelectedParticipants(eligibleCandidates.map(c => c.id));
     setStartingScrutinyType(type);
   };
@@ -125,7 +119,7 @@ export default function Admin() {
       type: 'START_SCRUTINY',
       payload: { type: startingScrutinyType, round: existingRounds + 1, participatingCandidateIds: selectedParticipants },
     });
-    toast.success(`Votação de ${startingScrutinyType === 'presbitero' ? 'Presbíteros' : 'Diáconos'} iniciada — ${existingRounds + 1}º escrutínio`);
+    toast.success(`Votação iniciada — ${existingRounds + 1}º escrutínio`);
     setStartingScrutinyType(null);
     setSelectedParticipants([]);
   };
@@ -136,23 +130,50 @@ export default function Admin() {
     toast.success('Votação encerrada');
   };
 
+  const handleRestartScrutiny = () => {
+    if (!state.currentScrutinyId) return;
+    if (confirm('Tem certeza? Isso vai apagar TODOS os votos computados nesta rodada atual da urna!')) {
+      dispatch({ type: 'RESTART_SCRUTINY', payload: state.currentScrutinyId });
+      toast.info('A rodada atual foi reiniciada. Urnas liberadas.');
+    }
+  };
+
   const handleApproveResults = (scrutinyId: string) => {
     dispatch({ type: 'APPROVE_RESULTS', payload: scrutinyId });
-    toast.success('Resultado aprovado e liberado para exibição no Data Show');
+    toast.success('Resultado liberado para o Data Show');
   };
 
   const handleReset = () => {
-    if (confirm('Tem certeza que deseja resetar toda a eleição? Os candidatos serão mantidos, mas os votos, vagas e resultados serão zerados.')) {
+    if (confirm('Tem certeza que deseja resetar toda a eleição? Os candidatos serão mantidos, mas os votos e vagas serão zerados.')) {
       dispatch({ type: 'RESET' });
-      toast.info('Eleição resetada, candidatos mantidos.');
+      toast.info('Eleição resetada.');
     }
   };
 
   const handleClearCandidates = () => {
-    if (confirm('Tem certeza absoluta que deseja apagar TODOS os candidatos cadastrados? Esta ação não pode ser desfeita.')) {
+    if (confirm('Tem certeza que deseja apagar TODOS os candidatos?')) {
       dispatch({ type: 'CLEAR_CANDIDATES' } as any);
-      toast.info('Todos os candidatos foram apagados.');
+      toast.info('Candidatos apagados.');
     }
+  };
+
+  const handleGerarCandidatosTeste = () => {
+    const candidatosTeste: Candidate[] = [
+      { id: crypto.randomUUID(), name: 'Antônio Carlos', photo: '', birthDate: '1975-03-12', currentRole: 'presbitero' },
+      { id: crypto.randomUUID(), name: 'Roberto Mendes', photo: '', birthDate: '1968-08-25', currentRole: 'diacono' },
+      { id: crypto.randomUUID(), name: 'Marcos Paulo', photo: '', birthDate: '1982-11-05', currentRole: 'membro' },
+      { id: crypto.randomUUID(), name: 'João Ferreira', photo: '', birthDate: '1990-01-15', currentRole: 'membro' },
+      { id: crypto.randomUUID(), name: 'Pedro Alves', photo: '', birthDate: '1979-06-30', currentRole: 'diacono_vencimento' },
+      { id: crypto.randomUUID(), name: 'Lucas Silva', photo: '', birthDate: '1985-09-18', currentRole: 'membro' },
+      { id: crypto.randomUUID(), name: 'Fernando Costa', photo: '', birthDate: '1971-04-22', currentRole: 'presbitero_vencimento' },
+      { id: crypto.randomUUID(), name: 'Ricardo Gomes', photo: '', birthDate: '1988-12-10', currentRole: 'membro' },
+      { id: crypto.randomUUID(), name: 'Marcelo Santos', photo: '', birthDate: '1976-02-28', currentRole: 'membro' },
+      { id: crypto.randomUUID(), name: 'Thiago Oliveira', photo: '', birthDate: '1992-07-07', currentRole: 'membro' },
+      { id: crypto.randomUUID(), name: 'Fábio Rocha', photo: '', birthDate: '1981-10-14', currentRole: 'membro' },
+      { id: crypto.randomUUID(), name: 'Carlos Eduardo', photo: '', birthDate: '1984-05-19', currentRole: 'membro' }
+    ];
+    dispatch({ type: 'SET_ELECTION', payload: { candidates: [...state.candidates, ...candidatosTeste] } });
+    toast.success('12 candidatos de teste adicionados!');
   };
 
   const handleLogout = () => {
@@ -160,7 +181,6 @@ export default function Admin() {
     navigate('/');
   };
 
-  // Calculate scrutiny info for display
   const getScrutinyInfo = (type: ScrutinyType) => {
     const alreadyElected = type === 'presbitero' ? state.electedPresbyters : state.electedDeacons;
     const slots = type === 'presbitero' ? state.presbyterSlots : state.deaconSlots;
@@ -172,7 +192,6 @@ export default function Admin() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
       <header className="bg-primary text-primary-foreground p-4 shadow-lg">
         <div className="max-w-5xl mx-auto flex items-center gap-4">
           <Button variant="ghost" size="icon" onClick={() => navigate('/')} className="text-primary-foreground hover:bg-primary-foreground/10">
@@ -194,7 +213,6 @@ export default function Admin() {
       </header>
 
       <main className="max-w-5xl mx-auto p-4 md:p-6 space-y-6">
-        {/* Pending Users (only for admin) */}
         {currentUser.isAdmin && pendingUsers.length > 0 && (
           <Card className="border-gold bg-gold/5">
             <CardHeader>
@@ -209,8 +227,7 @@ export default function Admin() {
                   <div key={u.username} className="flex items-center justify-between p-3 rounded-lg border bg-card">
                     <span className="font-semibold">{u.username}</span>
                     <div className="flex gap-2">
-                      <Button size="sm" onClick={() => { approveUser(u.username); toast.success(`${u.username} aprovado`); }}
-                        className="bg-success text-success-foreground hover:bg-success/90">
+                      <Button size="sm" onClick={() => { approveUser(u.username); toast.success(`${u.username} aprovado`); }} className="bg-success text-success-foreground hover:bg-success/90">
                         <CheckCircle2 className="w-4 h-4 mr-1" /> Aprovar
                       </Button>
                       <Button size="sm" variant="destructive" onClick={() => { rejectUser(u.username); toast.info(`${u.username} rejeitado`); }}>
@@ -224,7 +241,6 @@ export default function Admin() {
           </Card>
         )}
 
-        {/* Alerts */}
         {state.alerts.length > 0 && (
           <Card className="border-gold bg-gold/5">
             <CardContent className="pt-4">
@@ -234,60 +250,40 @@ export default function Admin() {
                   <span>{alert}</span>
                 </div>
               ))}
-              <Button variant="ghost" size="sm" onClick={() => dispatch({ type: 'CLEAR_ALERTS' })} className="mt-2 text-muted-foreground">
-                Limpar alertas
-              </Button>
+              <Button variant="ghost" size="sm" onClick={() => dispatch({ type: 'CLEAR_ALERTS' })} className="mt-2 text-muted-foreground">Limpar alertas</Button>
             </CardContent>
           </Card>
         )}
 
-        {/* Election Config */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-lg">
-              <Award className="w-5 h-5 text-gold" />
-              Configuração da Eleição
+              <Award className="w-5 h-5 text-gold" /> Configuração da Eleição
             </CardTitle>
           </CardHeader>
           <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <div>
-              <Label>Título da Eleição</Label>
-              <Input value={state.title} onChange={e => handleSaveElection('title', e.target.value)} placeholder="Ex: Eleição de Oficiais 2026" />
-            </div>
-            <div>
-              <Label>Data</Label>
-              <Input type="date" value={state.date} onChange={e => handleSaveElection('date', e.target.value)} />
-            </div>
-            <div>
-              <Label>Meta de Votantes (Quórum)</Label>
-              <Input type="number" min={0} value={state.voterGoal || ''} onChange={e => handleSaveElection('voterGoal', parseInt(e.target.value) || 0)} />
-            </div>
-            <div>
-              <Label>Vagas para Presbíteros</Label>
-              <Input type="number" min={0} value={state.presbyterSlots || ''} onChange={e => handleSaveElection('presbyterSlots', parseInt(e.target.value) || 0)} />
-            </div>
-            <div>
-              <Label>Vagas para Diáconos</Label>
-              <Input type="number" min={0} value={state.deaconSlots || ''} onChange={e => handleSaveElection('deaconSlots', parseInt(e.target.value) || 0)} />
-            </div>
+            <div><Label>Título da Eleição</Label><Input value={state.title} onChange={e => handleSaveElection('title', e.target.value)} /></div>
+            <div><Label>Data</Label><Input type="date" value={state.date} onChange={e => handleSaveElection('date', e.target.value)} /></div>
+            <div><Label>Meta de Votantes (Quórum)</Label><Input type="number" min={0} value={state.voterGoal || ''} onChange={e => handleSaveElection('voterGoal', parseInt(e.target.value) || 0)} /></div>
+            <div><Label>Vagas Presbíteros</Label><Input type="number" min={0} value={state.presbyterSlots || ''} onChange={e => handleSaveElection('presbyterSlots', parseInt(e.target.value) || 0)} /></div>
+            <div><Label>Vagas Diáconos</Label><Input type="number" min={0} value={state.deaconSlots || ''} onChange={e => handleSaveElection('deaconSlots', parseInt(e.target.value) || 0)} /></div>
           </CardContent>
         </Card>
 
-        {/* Candidates */}
         <Card>
           <CardHeader>
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <CardTitle className="flex items-center gap-2 text-lg">
-                <Users className="w-5 h-5 text-gold" />
-                Candidatos ({state.candidates.length})
+                <Users className="w-5 h-5 text-gold" /> Candidatos ({state.candidates.length})
               </CardTitle>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <Button size="sm" variant="destructive" onClick={handleClearCandidates} disabled={state.candidates.length === 0 || isVotingOpen}>
                   <Trash2 className="w-4 h-4 mr-1" /> Apagar Todos
                 </Button>
-                <Button size="sm" onClick={() => { setShowCandidateForm(true); setEditingCandidate(null); setForm({ name: '', photo: '', birthDate: '', currentRole: 'membro' }); }}
-                  disabled={isVotingOpen}
-                >
+                <Button size="sm" variant="secondary" onClick={handleGerarCandidatosTeste} disabled={isVotingOpen}>
+                  🧪 Gerar Testes
+                </Button>
+                <Button size="sm" onClick={() => { setShowCandidateForm(true); setEditingCandidate(null); setForm({ name: '', photo: '', birthDate: '', currentRole: 'membro' }); }} disabled={isVotingOpen}>
                   <UserPlus className="w-4 h-4 mr-1" /> Adicionar
                 </Button>
               </div>
@@ -297,40 +293,28 @@ export default function Admin() {
             {showCandidateForm && (
               <div className="mb-6 p-4 rounded-lg bg-muted space-y-3">
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <div>
-                    <Label>Nome</Label>
-                    <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Nome completo" />
-                  </div>
-                  <div>
-                    <Label>Data de Nascimento</Label>
-                    <Input type="date" value={form.birthDate} onChange={e => setForm(f => ({ ...f, birthDate: e.target.value }))} />
-                  </div>
+                  <div><Label>Nome</Label><Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} /></div>
+                  <div><Label>Data de Nascimento</Label><Input type="date" value={form.birthDate} onChange={e => setForm(f => ({ ...f, birthDate: e.target.value }))} /></div>
                   <div>
                     <Label>Cargo Atual</Label>
                     <Select value={form.currentRole} onValueChange={v => setForm(f => ({ ...f, currentRole: v as CandidateRole }))}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        {Object.entries(ROLE_LABELS).map(([k, v]) => (
-                          <SelectItem key={k} value={k}>{v}</SelectItem>
-                        ))}
+                        {Object.entries(ROLE_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>
                   <div>
-                    <Label>Foto</Label>
-                    <Input type="file" accept="image/*" onChange={handlePhotoUpload} />
+                    <Label>Foto</Label><Input type="file" accept="image/*" onChange={handlePhotoUpload} />
                     {form.photo && <img src={form.photo} alt="" className="w-12 h-12 rounded-full mt-2 object-cover" />}
                   </div>
                 </div>
                 <div className="flex gap-2">
-                  <Button size="sm" onClick={handleAddCandidate}>
-                    {editingCandidate ? 'Salvar' : 'Adicionar'}
-                  </Button>
+                  <Button size="sm" onClick={handleAddCandidate}>{editingCandidate ? 'Salvar' : 'Adicionar'}</Button>
                   <Button size="sm" variant="ghost" onClick={() => setShowCandidateForm(false)}>Cancelar</Button>
                 </div>
               </div>
             )}
-
             {state.candidates.length === 0 ? (
               <p className="text-muted-foreground text-center py-8">Nenhum candidato cadastrado</p>
             ) : (
@@ -338,20 +322,13 @@ export default function Admin() {
                 {state.candidates.map(c => (
                   <div key={c.id} className="flex items-center gap-3 p-3 rounded-lg border bg-card">
                     <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center overflow-hidden shrink-0">
-                      {c.photo ? (
-                        <img src={c.photo} alt={c.name} className="w-full h-full object-cover" />
-                      ) : (
-                        <Users className="w-5 h-5 text-muted-foreground" />
-                      )}
+                      {c.photo ? <img src={c.photo} alt={c.name} className="w-full h-full object-cover" /> : <Users className="w-5 h-5 text-muted-foreground" />}
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="font-semibold text-sm truncate">{c.name}</p>
                       <Badge variant="secondary" className="text-xs">{ROLE_LABELS[c.currentRole]}</Badge>
                     </div>
-                    <Button variant="ghost" size="icon" className="shrink-0 text-muted-foreground hover:text-destructive"
-                      onClick={() => dispatch({ type: 'REMOVE_CANDIDATE', payload: c.id })}
-                      disabled={isVotingOpen}
-                    >
+                    <Button variant="ghost" size="icon" className="shrink-0 text-muted-foreground hover:text-destructive" onClick={() => dispatch({ type: 'REMOVE_CANDIDATE', payload: c.id })} disabled={isVotingOpen}>
                       <Trash2 className="w-4 h-4" />
                     </Button>
                   </div>
@@ -361,13 +338,11 @@ export default function Admin() {
           </CardContent>
         </Card>
 
-        {/* Scrutiny Control */}
         <Card>
           <CardHeader>
             <CardTitle className="text-lg">Gerenciar Escrutínios</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {/* Candidate selection modal for starting scrutiny */}
             {startingScrutinyType && (
               <div className="p-4 rounded-lg bg-muted border-2 border-gold/30 space-y-4">
                 <div>
@@ -379,53 +354,23 @@ export default function Admin() {
                     return (
                       <div className="text-sm text-muted-foreground mt-1 space-y-1">
                         <p><strong>{info.nextRound}º Escrutínio</strong> — {info.remainingSlots} vaga(s) restante(s)</p>
-                        {info.nextRound >= 3 && (
-                          <p className="text-gold font-semibold">⚡ Escrutínio de afunilamento: apenas os candidatos mais votados da rodada anterior foram pré-selecionados. Nesta rodada valerá a maioria relativa.</p>
-                        )}
                       </div>
                     );
                   })()}
                 </div>
-                <p className="text-sm text-muted-foreground bg-card p-3 rounded border">
-                  📋 <strong>Selecione os candidatos que participarão deste escrutínio.</strong> Você pode desmarcar candidatos que desistiram ou não estão presentes. Apenas os selecionados aparecerão na urna.
-                </p>
                 <div className="grid gap-2 sm:grid-cols-2">
-                  {state.candidates
-                    .filter(c => {
-                      const alreadyElected = startingScrutinyType === 'presbitero' ? state.electedPresbyters : state.electedDeacons;
-                      return !alreadyElected.includes(c.id);
-                    })
-                    .map(c => {
+                  {state.candidates.filter(c => !((startingScrutinyType === 'presbitero' ? state.electedPresbyters : state.electedDeacons).includes(c.id))).map(c => {
                       const isSelected = selectedParticipants.includes(c.id);
                       return (
                         <label key={c.id} className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${isSelected ? 'bg-gold/10 border-gold/30' : 'bg-card hover:bg-muted'}`}>
-                          <Checkbox
-                            checked={isSelected}
-                            onCheckedChange={(checked) => {
-                              setSelectedParticipants(prev =>
-                                checked ? [...prev, c.id] : prev.filter(id => id !== c.id)
-                              );
-                            }}
-                          />
-                          <div className="w-8 h-8 rounded-full bg-muted overflow-hidden shrink-0">
-                            {c.photo ? (
-                              <img src={c.photo} alt="" className="w-full h-full object-cover" />
-                            ) : (
-                              <div className="w-full h-full flex items-center justify-center"><Users className="w-4 h-4 text-muted-foreground" /></div>
-                            )}
-                          </div>
-                          <div className="min-w-0">
-                            <p className="font-semibold text-sm truncate">{c.name}</p>
-                            <p className="text-xs text-muted-foreground">{ROLE_LABELS[c.currentRole]}</p>
-                          </div>
+                          <Checkbox checked={isSelected} onCheckedChange={(checked) => setSelectedParticipants(prev => checked ? [...prev, c.id] : prev.filter(id => id !== c.id))} />
+                          <div className="min-w-0"><p className="font-semibold text-sm truncate">{c.name}</p></div>
                         </label>
                       );
                     })}
                 </div>
                 <div className="flex gap-2">
-                  <Button onClick={handleConfirmStartScrutiny} className="bg-gold text-accent-foreground hover:bg-gold-light">
-                    <Play className="w-4 h-4 mr-1" /> Confirmar e Iniciar ({selectedParticipants.length} candidatos)
-                  </Button>
+                  <Button onClick={handleConfirmStartScrutiny} className="bg-gold text-accent-foreground hover:bg-gold-light"><Play className="w-4 h-4 mr-1" /> Confirmar ({selectedParticipants.length})</Button>
                   <Button variant="ghost" onClick={() => setStartingScrutinyType(null)}>Cancelar</Button>
                 </div>
               </div>
@@ -437,88 +382,58 @@ export default function Admin() {
                   <span className="w-2 h-2 rounded-full bg-success animate-pulse" />
                   Votação em andamento: {currentScrutiny.type === 'presbitero' ? 'Presbíteros' : 'Diáconos'} — {currentScrutiny.round}º escrutínio
                 </p>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Votos computados: {currentScrutiny.totalVotes} / {state.voterGoal}
-                </p>
-                <Button variant="destructive" size="sm" className="mt-3" onClick={handleCloseScrutiny}>
-                  <Square className="w-4 h-4 mr-1" /> Encerrar Votação
-                </Button>
-              </div>
-            )}
-
-            {!isVotingOpen && !startingScrutinyType && (
-              <div className="space-y-3">
-                <div className="flex flex-wrap gap-3">
-                  {(() => {
-                    const presInfo = getScrutinyInfo('presbitero');
-                    return presInfo.remainingSlots > 0 ? (
-                      <Button onClick={() => handleInitiateStartScrutiny('presbitero')}
-                        disabled={state.candidates.length === 0 || state.presbyterSlots === 0}
-                        className="bg-navy hover:bg-navy-light text-primary-foreground"
-                      >
-                        <Play className="w-4 h-4 mr-1" /> Iniciar Votação — Presbíteros ({presInfo.nextRound}º esc.)
-                      </Button>
-                    ) : state.presbyterSlots > 0 ? (
-                      <Badge variant="secondary" className="py-2 px-4">✅ Todas as vagas de Presbítero preenchidas</Badge>
-                    ) : null;
-                  })()}
-                  {(() => {
-                    const deaInfo = getScrutinyInfo('diacono');
-                    return deaInfo.remainingSlots > 0 ? (
-                      <Button onClick={() => handleInitiateStartScrutiny('diacono')}
-                        disabled={state.candidates.length === 0 || state.deaconSlots === 0}
-                        className="bg-navy hover:bg-navy-light text-primary-foreground"
-                      >
-                        <Play className="w-4 h-4 mr-1" /> Iniciar Votação — Diáconos ({deaInfo.nextRound}º esc.)
-                      </Button>
-                    ) : state.deaconSlots > 0 ? (
-                      <Badge variant="secondary" className="py-2 px-4">✅ Todas as vagas de Diácono preenchidas</Badge>
-                    ) : null;
-                  })()}
+                <p className="text-sm text-muted-foreground mt-1">Votos computados: {currentScrutiny.totalVotes} / {state.voterGoal}</p>
+                <div className="flex flex-wrap gap-2 mt-3">
+                  <Button variant="destructive" size="sm" onClick={handleCloseScrutiny}>
+                    <Square className="w-4 h-4 mr-1" /> Encerrar Votação
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={handleRestartScrutiny} className="border-destructive text-destructive hover:bg-destructive/10">
+                    <RotateCcw className="w-4 h-4 mr-1" /> Reiniciar Escrutínio Atual
+                  </Button>
                 </div>
               </div>
             )}
 
-            {/* Past scrutinies */}
+            {!isVotingOpen && !startingScrutinyType && (
+              <div className="flex flex-wrap gap-3">
+                {(() => {
+                  const pInfo = getScrutinyInfo('presbitero');
+                  return pInfo.remainingSlots > 0 ? (
+                    <Button onClick={() => handleInitiateStartScrutiny('presbitero')} disabled={state.candidates.length === 0 || state.presbyterSlots === 0} className="bg-navy hover:bg-navy-light text-primary-foreground"><Play className="w-4 h-4 mr-1" /> Presbíteros ({pInfo.nextRound}º esc.)</Button>
+                  ) : state.presbyterSlots > 0 ? <Badge variant="secondary" className="py-2 px-4">✅ Presbíteros preenchidos</Badge> : null;
+                })()}
+                {(() => {
+                  const dInfo = getScrutinyInfo('diacono');
+                  return dInfo.remainingSlots > 0 ? (
+                    <Button onClick={() => handleInitiateStartScrutiny('diacono')} disabled={state.candidates.length === 0 || state.deaconSlots === 0} className="bg-navy hover:bg-navy-light text-primary-foreground"><Play className="w-4 h-4 mr-1" /> Diáconos ({dInfo.nextRound}º esc.)</Button>
+                  ) : state.deaconSlots > 0 ? <Badge variant="secondary" className="py-2 px-4">✅ Diáconos preenchidos</Badge> : null;
+                })()}
+              </div>
+            )}
+
             {state.scrutinies.filter(s => s.status === 'closed').length > 0 && (
               <div className="mt-4">
                 <h3 className="font-semibold text-sm text-muted-foreground mb-2">Escrutínios Encerrados</h3>
                 <div className="space-y-2">
                   {state.scrutinies.filter(s => s.status === 'closed').map(s => {
-                    const sorted = Object.entries(s.votes)
-                      .filter(([id]) => s.participatingCandidateIds.includes(id))
-                      .sort((a, b) => b[1] - a[1]);
-                    const majorityThreshold = Math.floor(s.totalVotes / 2) + 1;
+                    const sorted = Object.entries(s.votes).filter(([id]) => s.participatingCandidateIds.includes(id)).sort((a, b) => b[1] - a[1]);
                     return (
                       <div key={s.id} className="p-3 rounded border bg-muted/50 text-sm">
                         <div className="flex items-center justify-between mb-2">
-                          <p className="font-semibold">
-                            {s.type === 'presbitero' ? 'Presbíteros' : 'Diáconos'} — {s.round}º escrutínio ({s.totalVotes} votos)
-                          </p>
+                          <p className="font-semibold">{s.type === 'presbitero' ? 'Presbíteros' : 'Diáconos'} — {s.round}º escrutínio ({s.totalVotes} votos)</p>
                           {!s.resultsApproved ? (
                             <Button size="sm" onClick={() => handleApproveResults(s.id)} className="bg-gold text-accent-foreground hover:bg-gold-light">
-                              <Eye className="w-4 h-4 mr-1" /> Aprovar e Liberar Resultado
+                              <Eye className="w-4 h-4 mr-1" /> Aprovar Resultado
                             </Button>
-                          ) : (
-                            <Badge className="bg-success text-success-foreground">✓ Resultado Liberado</Badge>
-                          )}
+                          ) : <Badge className="bg-success text-success-foreground">✓ Liberado</Badge>}
                         </div>
-                        <p className="text-xs text-muted-foreground mb-2">
-                          Maioria absoluta: {majorityThreshold} votos {s.round >= 3 && '(Maioria relativa neste escrutínio)'}
-                        </p>
                         <div className="space-y-1">
-                          {sorted.map(([candidateId, votes]) => {
-                            const c = state.candidates.find(x => x.id === candidateId);
-                            const isElected = s.electedIds.includes(candidateId);
-                            return (
-                              <div key={candidateId} className="flex items-center justify-between">
-                                <span className={isElected ? 'font-bold text-success' : ''}>
-                                  {isElected && '✓ '}{c?.name || 'Desconhecido'}
-                                </span>
-                                <span className="font-mono">{votes} votos</span>
-                              </div>
-                            );
-                          })}
+                          {sorted.map(([cId, v]) => (
+                            <div key={cId} className="flex justify-between">
+                              <span className={s.electedIds.includes(cId) ? 'font-bold text-success' : ''}>{s.electedIds.includes(cId) && '✓ '}{state.candidates.find(x => x.id === cId)?.name}</span>
+                              <span className="font-mono">{v} votos</span>
+                            </div>
+                          ))}
                         </div>
                       </div>
                     );
