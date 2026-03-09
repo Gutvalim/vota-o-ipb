@@ -5,8 +5,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Vote, LogIn, UserPlus, ArrowLeft } from 'lucide-react';
+import { LogIn, UserPlus, ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
+import logoIpnb from '@/assets/logo_ipnb.png';
 
 export default function Login() {
   const { login, register } = useAuth();
@@ -42,9 +43,7 @@ export default function Login() {
     <div className="min-h-screen bg-primary flex flex-col items-center justify-center p-6">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-primary-foreground/10 flex items-center justify-center">
-            <Vote className="w-8 h-8 text-gold" />
-          </div>
+          <img src={logoIpnb} alt="IPNB" className="w-20 h-20 mx-auto mb-4 rounded-full object-contain" />
           <h1 className="text-2xl font-display font-bold text-primary-foreground">
             {mode === 'login' ? 'Acesso Administrativo' : 'Novo Cadastro'}
           </h1>
