@@ -83,31 +83,42 @@ export default function Admin() {
     const nextRound = previousScrutinies.length + 1;
 
     let eligibleCandidates = state.candidates.filter(c => !alreadyElected.includes(c.id));
+    let initialSelected: string[] = [];
 
-    if (lastScrutiny) {
-      eligibleCandidates = eligibleCandidates.filter(c => lastScrutiny.participatingCandidateIds.includes(c.id));
-    }
+    if (nextRound === 1) {
+      // REGRA DO 1º ESCRUTÍNIO: Pré-seleciona só se a quantidade de candidatos for MENOR que o dobro de vagas
+      if (eligibleCandidates.length < (slots * 2)) {
+        initialSelected = eligibleCandidates.map(c => c.id);
+      } else {
+        initialSelected = []; // Como há muitos candidatos, vem tudo desmarcado
+      }
+    } else {
+      // 2º ESCRUTÍNIO EM DIANTE
+      if (lastScrutiny) {
+        eligibleCandidates = eligibleCandidates.filter(c => lastScrutiny.participatingCandidateIds.includes(c.id));
+      }
 
-    if (nextRound >= 3 && lastScrutiny) {
-      const sortedFromLast = Object.entries(lastScrutiny.votes)
-        .filter(([id]) => lastScrutiny.participatingCandidateIds.includes(id) && !alreadyElected.includes(id))
-        .sort((a, b) => {
-          // 1º CRITÉRIO: Quantidade de votos do maior para o menor
-          if (b[1] !== a[1]) return b[1] - a[1];
+      // 3º ESCRUTÍNIO EM DIANTE (Afunilamento e Desempate por Idade)
+      if (nextRound >= 3 && lastScrutiny) {
+        const sortedFromLast = Object.entries(lastScrutiny.votes)
+          .filter(([id]) => lastScrutiny.participatingCandidateIds.includes(id) && !alreadyElected.includes(id))
+          .sort((a, b) => {
+            if (b[1] !== a[1]) return b[1] - a[1]; // Ordena por votos
+            const ca = state.candidates.find(c => c.id === a[0]);
+            const cb = state.candidates.find(c => c.id === b[0]);
+            if (!ca || !cb) return 0;
+            return new Date(ca.birthDate).getTime() - new Date(cb.birthDate).getTime(); // Desempate por idade (mais velho sobe)
+          });
           
-          // 2º CRITÉRIO (DESEMPATE): Candidato mais velho tem preferência
-          const ca = state.candidates.find(c => c.id === a[0]);
-          const cb = state.candidates.find(c => c.id === b[0]);
-          if (!ca || !cb) return 0;
-          return new Date(ca.birthDate).getTime() - new Date(cb.birthDate).getTime();
-        });
-        
-      const funnelCount = remainingSlots * 2;
-      const funnelIds = sortedFromLast.slice(0, funnelCount).map(([id]) => id);
-      eligibleCandidates = eligibleCandidates.filter(c => funnelIds.includes(c.id));
+        const funnelCount = remainingSlots * 2;
+        const funnelIds = sortedFromLast.slice(0, funnelCount).map(([id]) => id);
+        eligibleCandidates = eligibleCandidates.filter(c => funnelIds.includes(c.id));
+      }
+      
+      initialSelected = eligibleCandidates.map(c => c.id);
     }
 
-    setSelectedParticipants(eligibleCandidates.map(c => c.id));
+    setSelectedParticipants(initialSelected);
     setStartingScrutinyType(type);
   };
 
