@@ -32,23 +32,23 @@
 
     --border: 214 20% 88%;
     --input: 214 20% 88%;
-    --ring: 220 56% 20%;
+    --ring: 157 93% 16%;
 
     --radius: 0.5rem;
 
-    --sidebar-background: 220 56% 15%;
-    --sidebar-foreground: 210 20% 96%;
+    --sidebar-background: 157 93% 12%;
+    --sidebar-foreground: 150 20% 96%;
     --sidebar-primary: 45 90% 55%;
-    --sidebar-primary-foreground: 220 40% 13%;
-    --sidebar-accent: 220 50% 22%;
-    --sidebar-accent-foreground: 210 20% 96%;
-    --sidebar-border: 220 50% 25%;
+    --sidebar-primary-foreground: 157 93% 16%;
+    --sidebar-accent: 157 80% 22%;
+    --sidebar-accent-foreground: 150 20% 96%;
+    --sidebar-border: 157 80% 25%;
     --sidebar-ring: 45 90% 55%;
 
     /* Custom tokens */
-    --navy: 220 56% 20%;
-    --navy-dark: 220 56% 15%;
-    --navy-light: 220 40% 30%;
+    --navy: 157 93% 16%;
+    --navy-dark: 157 93% 12%;
+    --navy-light: 157 70% 28%;
     --gold: 45 90% 55%;
     --gold-light: 45 85% 70%;
     --success: 142 71% 45%;
