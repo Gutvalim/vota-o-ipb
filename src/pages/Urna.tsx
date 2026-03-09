@@ -61,7 +61,6 @@ export default function Urna() {
 
   const votingClosed = currentScrutiny && currentScrutiny.status === 'closed';
   
-  // Cálculo de votos em branco para exibir a mensagem correta na tela
   const blankCount = effectiveMax - selectedIds.length;
 
   const toggleCandidate = (id: string) => {
@@ -69,10 +68,9 @@ export default function Urna() {
     setSelectedIds(prev => {
       if (prev.includes(id)) return prev.filter(x => x !== id);
       if (prev.length >= effectiveMax) {
-        // AVISO AGORA APARECE NO TOPO DA TELA
         toast.error(`Você só pode selecionar até ${effectiveMax} candidato(s)`, {
           position: 'top-center',
-          duration: 3500, // Fica na tela por 3,5 segundos
+          duration: 3500,
         });
         return prev;
       }
@@ -134,27 +132,28 @@ export default function Urna() {
 
   return (
     <div className="h-screen bg-primary flex flex-col overflow-hidden">
-      <header className="shrink-0 p-3 md:p-4 border-b border-primary-foreground/10">
+      <header className="shrink-0 p-2 md:p-3 border-b border-primary-foreground/10">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div>
             <h1 className="text-2xl md:text-3xl font-display font-bold text-primary-foreground leading-none">
               {currentScrutiny.type === 'presbitero' ? 'Presbíteros' : 'Diáconos'}
             </h1>
-            <p className="text-lg md:text-xl text-primary-foreground/60 mt-1">
+            <p className="text-base md:text-lg text-primary-foreground/60">
               {currentScrutiny.round}º Turno — Escolha até {effectiveMax} nome(s)
             </p>
           </div>
-          <div className="flex items-center gap-2 bg-primary-foreground/10 px-5 py-2 md:py-3 rounded-xl">
-            <span className="text-primary-foreground/60 text-lg md:text-xl font-bold">Escolhidos:</span>
-            <span className={`font-bold text-2xl md:text-3xl ${selectedIds.length === effectiveMax ? 'text-gold' : 'text-primary-foreground'}`}>
+          <div className="flex items-center gap-2 bg-primary-foreground/10 px-4 py-2 rounded-xl">
+            <span className="text-primary-foreground/60 text-base md:text-lg font-bold">Escolhidos:</span>
+            <span className={`font-bold text-xl md:text-2xl ${selectedIds.length === effectiveMax ? 'text-gold' : 'text-primary-foreground'}`}>
               {selectedIds.length}/{effectiveMax}
             </span>
           </div>
         </div>
       </header>
 
-      <main className="flex-1 flex flex-col items-center justify-center p-2 md:p-4 overflow-y-auto">
-        <div className="w-full max-w-7xl flex flex-wrap justify-center gap-3 md:gap-5">
+      {/* Grid reajustado para caber 12 candidatos perfeitamente em tablets */}
+      <main className="flex-1 flex flex-col items-center justify-center p-2 overflow-y-auto">
+        <div className="w-full max-w-7xl flex flex-wrap justify-center gap-2 md:gap-3">
           {participatingCandidates.map(c => {
             const isSelected = selectedIds.includes(c.id);
             return (
@@ -162,29 +161,29 @@ export default function Urna() {
                 key={c.id}
                 onClick={() => toggleCandidate(c.id)}
                 className={`
-                  w-[45%] sm:w-[30%] md:w-[22%] lg:w-[18%] max-w-[220px] shrink-0
-                  relative p-3 md:p-4 rounded-xl transition-all duration-200 text-center flex flex-col items-center justify-center
+                  w-[46%] sm:w-[30%] md:w-[23%] lg:w-[15%] max-w-[180px] shrink-0
+                  relative p-2 md:p-3 rounded-xl transition-all duration-200 text-center flex flex-col items-center justify-center
                   ${isSelected
-                    ? 'bg-gold/20 border-4 border-gold ring-4 ring-gold/30 scale-[1.02]'
-                    : 'bg-primary-foreground/5 border-4 border-transparent hover:bg-primary-foreground/10'
+                    ? 'bg-gold/20 border-[3px] border-gold ring-2 ring-gold/30 scale-[1.02]'
+                    : 'bg-primary-foreground/5 border-[3px] border-transparent hover:bg-primary-foreground/10'
                   }
                 `}
               >
-                <div className="w-16 h-16 md:w-24 md:h-24 mb-3 rounded-full bg-primary-foreground/10 overflow-hidden shrink-0 shadow-lg">
+                <div className="w-12 h-12 md:w-16 md:h-16 mb-2 rounded-full bg-primary-foreground/10 overflow-hidden shrink-0 shadow-sm">
                   {c.photo ? (
                     <img src={c.photo} alt={c.name} className="w-full h-full object-cover" />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center">
-                      <Users className="w-8 h-8 md:w-12 md:h-12 text-primary-foreground/30" />
+                      <Users className="w-6 h-6 md:w-8 md:h-8 text-primary-foreground/30" />
                     </div>
                   )}
                 </div>
-                <p className="text-primary-foreground font-bold text-xl md:text-2xl leading-tight line-clamp-2">
+                <p className="text-primary-foreground font-bold text-lg md:text-xl leading-tight line-clamp-2">
                   {c.name}
                 </p>
                 {isSelected && (
-                  <div className="absolute top-2 right-2 md:top-3 md:right-3 w-8 h-8 md:w-10 md:h-10 rounded-full bg-gold flex items-center justify-center shadow-lg">
-                    <CheckCircle2 className="w-5 h-5 md:w-7 md:h-7 text-accent-foreground" />
+                  <div className="absolute top-1 right-1 md:top-2 md:right-2 w-6 h-6 md:w-8 md:h-8 rounded-full bg-gold flex items-center justify-center shadow-md">
+                    <CheckCircle2 className="w-4 h-4 md:w-5 md:h-5 text-accent-foreground" />
                   </div>
                 )}
               </button>
@@ -193,11 +192,11 @@ export default function Urna() {
         </div>
       </main>
 
-      <footer className="shrink-0 p-3 md:p-5 border-t border-primary-foreground/10 bg-primary/95 backdrop-blur shadow-[0_-10px_30px_rgba(0,0,0,0.3)]">
+      <footer className="shrink-0 p-2 md:p-3 border-t border-primary-foreground/10 bg-primary/95 backdrop-blur shadow-[0_-10px_30px_rgba(0,0,0,0.3)]">
         <div className="max-w-7xl mx-auto flex justify-center items-center h-full">
           {showConfirm ? (
-            <div className="w-full flex flex-col sm:flex-row items-center justify-between gap-4">
-              <p className="text-primary-foreground font-display font-bold text-xl md:text-3xl text-center">
+            <div className="w-full flex flex-col sm:flex-row items-center justify-between gap-3">
+              <p className="text-primary-foreground font-display font-bold text-lg md:text-2xl text-center">
                 {selectedIds.length === 0 
                   ? `Confirmar ${blankCount} VOTO(S) EM BRANCO?`
                   : blankCount > 0 
@@ -205,11 +204,11 @@ export default function Urna() {
                     : `Confirmar voto em ${selectedIds.length} candidato(s)?`
                 }
               </p>
-              <div className="flex gap-4 w-full sm:w-auto">
-                <Button variant="ghost" onClick={() => setShowConfirm(false)} className="flex-1 sm:flex-none text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground text-xl md:text-2xl py-8 px-6">
+              <div className="flex gap-2 w-full sm:w-auto">
+                <Button variant="ghost" onClick={() => setShowConfirm(false)} className="flex-1 sm:flex-none text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground text-lg md:text-xl py-6 px-4 md:px-6">
                   Corrigir
                 </Button>
-                <Button onClick={handleConfirm} className="flex-1 sm:flex-none bg-success text-success-foreground hover:bg-success/90 font-bold text-2xl md:text-3xl px-12 py-8 animate-pulse-ring">
+                <Button onClick={handleConfirm} className="flex-1 sm:flex-none bg-success text-success-foreground hover:bg-success/90 font-bold text-xl md:text-2xl py-6 px-6 md:px-10 animate-pulse-ring">
                   CONFIRMAR
                 </Button>
               </div>
@@ -218,14 +217,14 @@ export default function Urna() {
             <Button
               onClick={() => setShowConfirm(true)}
               className={`
-                w-full md:w-auto font-bold text-2xl md:text-4xl px-8 py-8 md:px-24 md:py-10 shadow-xl transition-all
+                w-full md:w-auto font-bold text-xl md:text-3xl px-6 py-6 md:px-16 md:py-8 shadow-lg transition-all
                 ${selectedIds.length === 0 ? 'bg-secondary text-secondary-foreground hover:bg-secondary/80' : 'bg-gold text-accent-foreground hover:bg-gold-light'}
               `}
             >
               {selectedIds.length === 0 ? (
                 `VOTAR EM BRANCO (${blankCount})`
               ) : (
-                <><Vote className="w-8 h-8 md:w-10 md:h-10 mr-3" /> VOTAR ({selectedIds.length}/{effectiveMax})</>
+                <><Vote className="w-6 h-6 md:w-8 md:h-8 mr-2 md:mr-3" /> VOTAR ({selectedIds.length}/{effectiveMax})</>
               )}
             </Button>
           )}
