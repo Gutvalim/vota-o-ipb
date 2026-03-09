@@ -149,8 +149,9 @@ export default function Urna() {
         </div>
       </header>
 
-      <main className="flex-1 flex flex-col items-center justify-center p-2 md:p-4">
-        <div className="w-full max-w-7xl grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 md:gap-4">
+      {/* Grid refeito com Flexbox para sempre centralizar os candidatos, inclusive a última linha */}
+      <main className="flex-1 flex flex-col items-center justify-center p-2 md:p-4 overflow-y-auto">
+        <div className="w-full max-w-7xl flex flex-wrap justify-center gap-3 md:gap-5">
           {participatingCandidates.map(c => {
             const isSelected = selectedIds.includes(c.id);
             return (
@@ -158,6 +159,7 @@ export default function Urna() {
                 key={c.id}
                 onClick={() => toggleCandidate(c.id)}
                 className={`
+                  w-[45%] sm:w-[30%] md:w-[22%] lg:w-[18%] max-w-[220px] shrink-0
                   relative p-3 md:p-4 rounded-xl transition-all duration-200 text-center flex flex-col items-center justify-center
                   ${isSelected
                     ? 'bg-gold/20 border-4 border-gold ring-4 ring-gold/30 scale-[1.02]'
