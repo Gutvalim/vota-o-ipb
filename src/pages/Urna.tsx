@@ -15,24 +15,24 @@ export default function Urna() {
   const currentScrutiny = state.scrutinies.find(s => s.id === state.currentScrutinyId);
   const isOpen = currentScrutiny?.status === 'open';
 
-  // LÓGICA CORRIGIDA: Calcula exatamente as vagas RESTANTES para limitar os cliques
   const alreadyElected = currentScrutiny?.type === 'presbitero' ? state.electedPresbyters : state.electedDeacons;
   const totalSlots = currentScrutiny?.type === 'presbitero' ? state.presbyterSlots : state.deaconSlots;
   const effectiveMax = currentScrutiny ? (totalSlots - (alreadyElected?.length || 0)) : 0;
 
-  // Mostra apenas os candidatos participantes da rodada atual
+  // Filtra quem participa e ORDENA EM ORDEM ALFABÉTICA
   const participatingCandidates = isOpen && currentScrutiny
-    ? state.candidates.filter(c => currentScrutiny.participatingCandidateIds.includes(c.id))
+    ? state.candidates
+        .filter(c => currentScrutiny.participatingCandidateIds.includes(c.id))
+        .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
     : [];
 
-  // Checa se a meta de votos foi atingida (fechamento automático)
   const votingClosed = currentScrutiny && currentScrutiny.status === 'closed';
+  const isBlankVote = selectedIds.length === 0;
 
   const toggleCandidate = (id: string) => {
     if (hasVoted) return;
     setSelectedIds(prev => {
       if (prev.includes(id)) return prev.filter(x => x !== id);
-      // Aqui aplicamos o limite dinâmico das vagas que sobraram
       if (prev.length >= effectiveMax) {
         toast.error(`Selecione no máximo ${effectiveMax} candidato(s)`);
         return prev;
@@ -43,6 +43,7 @@ export default function Urna() {
 
   const handleConfirm = () => {
     if (!currentScrutiny) return;
+    // O backend já entende que candidateIds vazio [] = Voto em Branco (soma no total, mas pra ninguém)
     dispatch({ type: 'CAST_VOTE', payload: { scrutinyId: currentScrutiny.id, candidateIds: selectedIds } });
     setHasVoted(true);
     setShowConfirm(false);
@@ -56,16 +57,16 @@ export default function Urna() {
 
   if (!isOpen || votingClosed) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-primary p-8">
-        <Vote className="w-16 h-16 text-gold mb-6" />
-        <h1 className="text-3xl font-display font-bold text-primary-foreground mb-4 text-center">
+      <div className="h-screen flex flex-col items-center justify-center bg-primary p-8 overflow-hidden">
+        <Vote className="w-24 h-24 text-gold mb-6" />
+        <h1 className="text-4xl md:text-5xl font-display font-bold text-primary-foreground mb-4 text-center">
           {state.title || 'Sistema de Votação'}
         </h1>
-        <p className="text-primary-foreground/60 text-lg mb-8 text-center">
+        <p className="text-primary-foreground/60 text-2xl mb-8 text-center">
           {votingClosed ? 'A votação foi encerrada. Aguarde o resultado.' : 'Nenhuma votação em andamento no momento.'}
         </p>
-        <Button variant="ghost" onClick={() => navigate('/')} className="text-primary-foreground/40 hover:text-primary-foreground hover:bg-primary-foreground/10">
-          <ArrowLeft className="w-4 h-4 mr-2" /> Voltar
+        <Button variant="ghost" onClick={() => navigate('/')} className="text-primary-foreground/40 hover:text-primary-foreground hover:bg-primary-foreground/10 text-xl py-6">
+          <ArrowLeft className="w-6 h-6 mr-2" /> Voltar ao Início
         </Button>
       </div>
     );
@@ -73,17 +74,17 @@ export default function Urna() {
 
   if (hasVoted) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-primary p-8">
-        <div className="vote-confirmed text-center">
-          <CheckCircle2 className="w-24 h-24 text-success mx-auto mb-6" />
-          <h1 className="text-4xl font-display font-bold text-primary-foreground mb-4">
+      <div className="h-screen flex flex-col items-center justify-center bg-primary p-8 overflow-hidden">
+        <div className="text-center">
+          <CheckCircle2 className="w-32 h-32 text-success mx-auto mb-8" />
+          <h1 className="text-5xl md:text-6xl font-display font-bold text-primary-foreground mb-6">
             Voto Confirmado!
           </h1>
-          <p className="text-primary-foreground/60 text-lg mb-8">
-            Seu voto foi computado com sucesso.
+          <p className="text-primary-foreground/60 text-2xl mb-12">
+            Seu voto foi registrado com sucesso.
           </p>
-          <Button onClick={handleNewVote} className="bg-gold text-accent-foreground hover:bg-gold-light text-lg px-8 py-6">
-            Próximo Eleitor
+          <Button onClick={handleNewVote} className="bg-gold text-accent-foreground hover:bg-gold-light text-2xl px-12 py-8">
+            Liberar para o Próximo Eleitor
           </Button>
         </div>
       </div>
@@ -91,25 +92,30 @@ export default function Urna() {
   }
 
   return (
-    <div className="min-h-screen bg-primary flex flex-col">
-      {/* Header */}
-      <header className="p-4 border-b border-primary-foreground/10">
-        <div className="max-w-4xl mx-auto flex items-center justify-between">
+    <div className="h-screen bg-primary flex flex-col overflow-hidden">
+      {/* Header Compacto */}
+      <header className="shrink-0 p-3 md:p-4 border-b border-primary-foreground/10">
+        <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div>
-            <h1 className="text-xl font-display font-bold text-primary-foreground">
-              {currentScrutiny.type === 'presbitero' ? 'Eleição de Presbíteros' : 'Eleição de Diáconos'}
+            <h1 className="text-2xl md:text-3xl font-display font-bold text-primary-foreground leading-none">
+              {currentScrutiny.type === 'presbitero' ? 'Presbíteros' : 'Diáconos'}
             </h1>
-            <p className="text-sm text-primary-foreground/50">
-              {currentScrutiny.round}º Escrutínio — Selecione até {effectiveMax} candidato(s)
+            <p className="text-lg md:text-xl text-primary-foreground/60 mt-1">
+              {currentScrutiny.round}º Turno — Escolha até {effectiveMax} nome(s)
             </p>
           </div>
-          <VoteBadge count={selectedIds.length} max={effectiveMax} />
+          <div className="flex items-center gap-2 bg-primary-foreground/10 px-5 py-2 md:py-3 rounded-xl">
+            <span className="text-primary-foreground/60 text-lg md:text-xl font-bold">Escolhidos:</span>
+            <span className={`font-bold text-2xl md:text-3xl ${selectedIds.length === effectiveMax ? 'text-gold' : 'text-primary-foreground'}`}>
+              {selectedIds.length}/{effectiveMax}
+            </span>
+          </div>
         </div>
       </header>
 
-      {/* Candidates Grid */}
-      <main className="flex-1 p-4 md:p-6 overflow-auto">
-        <div className="max-w-4xl mx-auto grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+      {/* Grid de Candidatos (Sem rolagem vertical forçada, distribuído automaticamente) */}
+      <main className="flex-1 flex flex-col items-center justify-center p-2 md:p-4">
+        <div className="w-full max-w-7xl grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 md:gap-4">
           {participatingCandidates.map(c => {
             const isSelected = selectedIds.includes(c.id);
             return (
@@ -117,26 +123,28 @@ export default function Urna() {
                 key={c.id}
                 onClick={() => toggleCandidate(c.id)}
                 className={`
-                  relative p-4 rounded-xl transition-all duration-200 text-center
+                  relative p-3 md:p-4 rounded-xl transition-all duration-200 text-center flex flex-col items-center justify-center
                   ${isSelected
-                    ? 'bg-gold/20 border-2 border-gold ring-2 ring-gold/30 scale-[1.02]'
-                    : 'bg-primary-foreground/5 border-2 border-transparent hover:bg-primary-foreground/10'
+                    ? 'bg-gold/20 border-4 border-gold ring-4 ring-gold/30 scale-[1.02]'
+                    : 'bg-primary-foreground/5 border-4 border-transparent hover:bg-primary-foreground/10'
                   }
                 `}
               >
-                <div className="w-20 h-20 mx-auto mb-3 rounded-full bg-primary-foreground/10 overflow-hidden">
+                <div className="w-16 h-16 md:w-24 md:h-24 mb-3 rounded-full bg-primary-foreground/10 overflow-hidden shrink-0 shadow-lg">
                   {c.photo ? (
                     <img src={c.photo} alt={c.name} className="w-full h-full object-cover" />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center">
-                      <Users className="w-8 h-8 text-primary-foreground/30" />
+                      <Users className="w-8 h-8 md:w-12 md:h-12 text-primary-foreground/30" />
                     </div>
                   )}
                 </div>
-                <p className="text-primary-foreground font-semibold text-sm leading-tight">{c.name}</p>
+                <p className="text-primary-foreground font-bold text-xl md:text-2xl leading-tight line-clamp-2">
+                  {c.name}
+                </p>
                 {isSelected && (
-                  <div className="absolute top-2 right-2 w-6 h-6 rounded-full bg-gold flex items-center justify-center">
-                    <CheckCircle2 className="w-4 h-4 text-accent-foreground" />
+                  <div className="absolute top-2 right-2 md:top-3 md:right-3 w-8 h-8 md:w-10 md:h-10 rounded-full bg-gold flex items-center justify-center shadow-lg">
+                    <CheckCircle2 className="w-5 h-5 md:w-7 md:h-7 text-accent-foreground" />
                   </div>
                 )}
               </button>
@@ -145,50 +153,40 @@ export default function Urna() {
         </div>
       </main>
 
-      {/* Footer */}
-      <footer className="p-4 border-t border-primary-foreground/10">
-        <div className="max-w-4xl mx-auto flex justify-center">
+      {/* Footer Fixo e Gigante */}
+      <footer className="shrink-0 p-3 md:p-5 border-t border-primary-foreground/10 bg-primary/95 backdrop-blur shadow-[0_-10px_30px_rgba(0,0,0,0.3)]">
+        <div className="max-w-7xl mx-auto flex justify-center items-center h-full">
           {showConfirm ? (
-            <div className="text-center space-y-3">
-              <p className="text-primary-foreground font-display font-bold text-lg">
-                Confirmar voto em {selectedIds.length} candidato(s)?
+            <div className="w-full flex flex-col sm:flex-row items-center justify-between gap-4">
+              <p className="text-primary-foreground font-display font-bold text-2xl md:text-3xl text-center">
+                {isBlankVote ? 'Confirmar VOTO EM BRANCO?' : `Confirmar voto em ${selectedIds.length} candidato(s)?`}
               </p>
-              <div className="flex gap-3 justify-center">
-                <Button variant="ghost" onClick={() => setShowConfirm(false)} className="text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground">
+              <div className="flex gap-4 w-full sm:w-auto">
+                <Button variant="ghost" onClick={() => setShowConfirm(false)} className="flex-1 sm:flex-none text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground text-xl md:text-2xl py-8 px-6">
                   Corrigir
                 </Button>
-                <Button onClick={handleConfirm} className="bg-success text-success-foreground hover:bg-success/90 text-lg px-8 py-6 animate-pulse-ring">
+                <Button onClick={handleConfirm} className="flex-1 sm:flex-none bg-success text-success-foreground hover:bg-success/90 font-bold text-2xl md:text-3xl px-12 py-8 animate-pulse-ring">
                   CONFIRMAR
                 </Button>
               </div>
             </div>
           ) : (
             <Button
-              onClick={() => {
-                if (selectedIds.length === 0) {
-                  toast.error('Selecione pelo menos um candidato');
-                  return;
-                }
-                setShowConfirm(true);
-              }}
-              className="bg-gold text-accent-foreground hover:bg-gold-light text-lg px-12 py-6"
+              onClick={() => setShowConfirm(true)}
+              className={`
+                w-full md:w-auto font-bold text-2xl md:text-4xl px-8 py-8 md:px-24 md:py-10 shadow-xl transition-all
+                ${isBlankVote ? 'bg-secondary text-secondary-foreground hover:bg-secondary/80' : 'bg-gold text-accent-foreground hover:bg-gold-light'}
+              `}
             >
-              <Vote className="w-5 h-5 mr-2" /> Votar ({selectedIds.length}/{effectiveMax})
+              {isBlankVote ? (
+                'VOTAR EM BRANCO'
+              ) : (
+                <><Vote className="w-8 h-8 md:w-10 md:h-10 mr-3" /> VOTAR ({selectedIds.length}/{effectiveMax})</>
+              )}
             </Button>
           )}
         </div>
       </footer>
-    </div>
-  );
-}
-
-function VoteBadge({ count, max }: { count: number; max: number }) {
-  return (
-    <div className="flex items-center gap-2 bg-primary-foreground/10 px-4 py-2 rounded-full">
-      <span className="text-primary-foreground/60 text-sm">Selecionados:</span>
-      <span className={`font-bold text-lg ${count === max ? 'text-gold' : 'text-primary-foreground'}`}>
-        {count}/{max}
-      </span>
     </div>
   );
 }
