@@ -157,25 +157,6 @@ export default function Admin() {
     }
   };
 
-  const handleGerarCandidatosTeste = () => {
-    const candidatosTeste: Candidate[] = [
-      { id: crypto.randomUUID(), name: 'Antônio Carlos', photo: '', birthDate: '1975-03-12', currentRole: 'presbitero' },
-      { id: crypto.randomUUID(), name: 'Roberto Mendes', photo: '', birthDate: '1968-08-25', currentRole: 'diacono' },
-      { id: crypto.randomUUID(), name: 'Marcos Paulo', photo: '', birthDate: '1982-11-05', currentRole: 'membro' },
-      { id: crypto.randomUUID(), name: 'João Ferreira', photo: '', birthDate: '1990-01-15', currentRole: 'membro' },
-      { id: crypto.randomUUID(), name: 'Pedro Alves', photo: '', birthDate: '1979-06-30', currentRole: 'diacono_vencimento' },
-      { id: crypto.randomUUID(), name: 'Lucas Silva', photo: '', birthDate: '1985-09-18', currentRole: 'membro' },
-      { id: crypto.randomUUID(), name: 'Fernando Costa', photo: '', birthDate: '1971-04-22', currentRole: 'presbitero_vencimento' },
-      { id: crypto.randomUUID(), name: 'Ricardo Gomes', photo: '', birthDate: '1988-12-10', currentRole: 'membro' },
-      { id: crypto.randomUUID(), name: 'Marcelo Santos', photo: '', birthDate: '1976-02-28', currentRole: 'membro' },
-      { id: crypto.randomUUID(), name: 'Thiago Oliveira', photo: '', birthDate: '1992-07-07', currentRole: 'membro' },
-      { id: crypto.randomUUID(), name: 'Fábio Rocha', photo: '', birthDate: '1981-10-14', currentRole: 'membro' },
-      { id: crypto.randomUUID(), name: 'Carlos Eduardo', photo: '', birthDate: '1984-05-19', currentRole: 'membro' }
-    ];
-    dispatch({ type: 'SET_ELECTION', payload: { candidates: [...state.candidates, ...candidatosTeste] } });
-    toast.success('12 candidatos de teste adicionados!');
-  };
-
   const handleLogout = () => {
     logout();
     navigate('/');
@@ -279,9 +260,6 @@ export default function Admin() {
               <div className="flex flex-wrap gap-2">
                 <Button size="sm" variant="destructive" onClick={handleClearCandidates} disabled={state.candidates.length === 0 || isVotingOpen}>
                   <Trash2 className="w-4 h-4 mr-1" /> Apagar Todos
-                </Button>
-                <Button size="sm" variant="secondary" onClick={handleGerarCandidatosTeste} disabled={isVotingOpen}>
-                  🧪 Gerar Testes
                 </Button>
                 <Button size="sm" onClick={() => { setShowCandidateForm(true); setEditingCandidate(null); setForm({ name: '', photo: '', birthDate: '', currentRole: 'membro' }); }} disabled={isVotingOpen}>
                   <UserPlus className="w-4 h-4 mr-1" /> Adicionar
