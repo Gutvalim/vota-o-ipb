@@ -41,7 +41,6 @@ export default function DataShow() {
   // Check if there's a closed but not yet approved scrutiny
   const pendingApproval = state.scrutinies.find(s => s.status === 'closed' && !s.resultsApproved);
 
-  // Botão de voltar discreto para o operador
   const BackButton = () => (
     <Button
       variant="ghost"
@@ -124,7 +123,7 @@ export default function DataShow() {
     );
   }
 
-  // PENDING APPROVAL (closed but not approved)
+  // PENDING APPROVAL
   if (pendingApproval) {
     return (
       <div className="min-h-screen bg-primary relative flex flex-col items-center justify-center p-8">
@@ -166,7 +165,7 @@ export default function DataShow() {
         </div>
 
         <div className="flex-1 flex items-start justify-center overflow-auto">
-          <div className="w-full max-w-3xl space-y-3">
+          <div className="w-full max-w-3xl space-y-3 pb-8">
             {sortedEntries.map(([candidateId, votes], index) => {
               const candidate = state.candidates.find(c => c.id === candidateId);
               const isElected = latestApproved.electedIds.includes(candidateId);
@@ -217,6 +216,24 @@ export default function DataShow() {
                 </div>
               );
             })}
+
+            {/* Exibe Votos em Branco de forma destacada se houverem */}
+            {(latestApproved.blankVotes || 0) > 0 && (
+              <div className="flex items-center gap-4 p-4 rounded-xl transition-all bg-secondary/10 border border-secondary/20 mt-6">
+                <span className="text-2xl font-bold w-8 text-center text-primary-foreground/30">-</span>
+                <div className="w-14 h-14 rounded-full bg-secondary/20 flex items-center justify-center shrink-0">
+                  <Vote className="w-6 h-6 text-primary-foreground/40" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <span className="font-display font-bold text-lg text-primary-foreground/60">
+                    Votos em Branco
+                  </span>
+                </div>
+                <span className="text-3xl font-mono font-bold text-primary-foreground/50">
+                  {latestApproved.blankVotes}
+                </span>
+              </div>
+            )}
           </div>
         </div>
 
