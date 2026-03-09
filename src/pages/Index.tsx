@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { Vote, Settings, Monitor } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import logoIpnb from '@/assets/logo_ipnb.png';
 
 const Index = () => {
   const navigate = useNavigate();
@@ -9,9 +10,7 @@ const Index = () => {
     <div className="min-h-screen flex flex-col items-center justify-center bg-primary p-6">
       <div className="text-center max-w-2xl">
         <div className="mb-8">
-          <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-primary-foreground/10 flex items-center justify-center">
-            <Vote className="w-10 h-10 text-gold" />
-          </div>
+          <img src={logoIpnb} alt="Igreja Presbiteriana de Nova Brasília" className="w-32 h-32 mx-auto mb-6 rounded-full object-contain" />
           <h1 className="text-4xl md:text-5xl font-display font-bold text-primary-foreground mb-3">
             Sistema de Votação
           </h1>
