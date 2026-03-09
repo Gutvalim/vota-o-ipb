@@ -35,6 +35,7 @@ export interface Scrutiny {
   status: ScrutinyStatus;
   votes: Record<string, number>;
   totalVotes: number;
+  blankVotes: number; // NOVO: Contador de votos em branco
   startedAt?: number;
   participatingCandidateIds: string[];
   resultsApproved: boolean;
@@ -150,6 +151,7 @@ function reducer(state: ElectionState, action: Action): ElectionState {
         status: 'open',
         votes: {},
         totalVotes: 0,
+        blankVotes: 0,
         startedAt: Date.now(),
         participatingCandidateIds: action.payload.participatingCandidateIds,
         resultsApproved: false,
@@ -160,13 +162,32 @@ function reducer(state: ElectionState, action: Action): ElectionState {
     }
 
     case 'RESTART_SCRUTINY': {
+      const scrutinyId = action.payload;
+      const targetScrutiny = state.scrutinies.find(s => s.id === scrutinyId);
+      if (!targetScrutiny) return state;
+
+      // Se já estava fechado, removemos os eleitos desta rodada das listas globais
+      let updatedPresbyters = [...state.electedPresbyters];
+      let updatedDeacons = [...state.electedDeacons];
+      
+      if (targetScrutiny.status === 'closed') {
+        if (targetScrutiny.type === 'presbitero') {
+          updatedPresbyters = updatedPresbyters.filter(id => !targetScrutiny.electedIds.includes(id));
+        } else {
+          updatedDeacons = updatedDeacons.filter(id => !targetScrutiny.electedIds.includes(id));
+        }
+      }
+
       return {
         ...state,
+        currentScrutinyId: scrutinyId,
+        electedPresbyters: updatedPresbyters,
+        electedDeacons: updatedDeacons,
         scrutinies: state.scrutinies.map(s => {
-          if (s.id !== action.payload) return s;
+          if (s.id !== scrutinyId) return s;
           const resetVotes: Record<string, number> = {};
           s.participatingCandidateIds.forEach(id => { resetVotes[id] = 0; });
-          return { ...s, votes: resetVotes, totalVotes: 0, startedAt: Date.now() };
+          return { ...s, status: 'open', votes: resetVotes, totalVotes: 0, blankVotes: 0, startedAt: Date.now(), electedIds: [], resultsApproved: false };
         })
       };
     }
@@ -179,8 +200,10 @@ function reducer(state: ElectionState, action: Action): ElectionState {
           newVotes[id] = (newVotes[id] || 0) + 1;
         });
         const newTotal = s.totalVotes + 1;
+        const isBlank = action.payload.candidateIds.length === 0;
+        const newBlankVotes = (s.blankVotes || 0) + (isBlank ? 1 : 0);
         const shouldClose = state.voterGoal > 0 && newTotal >= state.voterGoal;
-        return { ...s, votes: newVotes, totalVotes: newTotal, status: shouldClose ? 'closed' as const : s.status };
+        return { ...s, votes: newVotes, totalVotes: newTotal, blankVotes: newBlankVotes, status: shouldClose ? 'closed' as const : s.status };
       });
 
       const closedScrutiny = scrutinies.find(s => s.id === action.payload.scrutinyId && s.status === 'closed');
