@@ -1,8 +1,7 @@
 import React, { createContext, useContext, useReducer, useEffect, ReactNode, useRef } from 'react';
-import { initializeApp } from "firebase/app";
+import { initializeApp, getApps, getApp } from "firebase/app";
 import { getFirestore, doc, setDoc, onSnapshot, runTransaction } from "firebase/firestore";
 
-// 1. INICIALIZAÇÃO DO FIREBASE
 const firebaseConfig = {
   apiKey: "AIzaSyD5lSgqKvXFZBK8-PalruztaoZliXxT8GE",
   authDomain: "eleicao-ipb.firebaseapp.com",
@@ -12,11 +11,10 @@ const firebaseConfig = {
   appId: "1:1072551138226:web:24b2aa1109e5bdb0c10aab"
 };
 
-const app = initializeApp(firebaseConfig);
+const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 const db = getFirestore(app);
-const ELECTION_DOC_ID = 'current'; // Nome do documento no banco de dados
+const ELECTION_DOC_ID = 'current';
 
-// 2. INTERFACES
 export type CandidateRole = 'presbitero' | 'presbitero_vencimento' | 'diacono' | 'diacono_vencimento' | 'membro';
 
 export interface Candidate {
@@ -77,6 +75,7 @@ type Action =
   | { type: 'REMOVE_CANDIDATE'; payload: string }
   | { type: 'UPDATE_CANDIDATE'; payload: Candidate }
   | { type: 'START_SCRUTINY'; payload: { type: ScrutinyType; round: number; participatingCandidateIds: string[] } }
+  | { type: 'RESTART_SCRUTINY'; payload: string }
   | { type: 'CAST_VOTE'; payload: { scrutinyId: string; candidateIds: string[] } }
   | { type: 'CLOSE_SCRUTINY'; payload: string }
   | { type: 'APPROVE_RESULTS'; payload: string }
@@ -85,9 +84,8 @@ type Action =
   | { type: 'SET_ELECTED'; payload: { type: ScrutinyType; candidateIds: string[] } }
   | { type: 'CLEAR_CANDIDATES' }
   | { type: 'RESET' }
-  | { type: 'SYNC_FROM_FIREBASE'; payload: ElectionState }; // Nova ação para sincronização
+  | { type: 'SYNC_FROM_FIREBASE'; payload: ElectionState };
 
-// 3. LÓGICA DE APURAÇÃO (Mantida intacta)
 export function resolveResults(
   scrutiny: Scrutiny,
   candidates: Candidate[],
@@ -116,24 +114,18 @@ export function resolveResults(
     });
 
   let elected: string[];
-  
   if (isThirdOrLater) {
     elected = entries.slice(0, remainingSlots).map(e => e.id);
   } else {
-    elected = entries
-      .filter(e => e.count >= majorityThreshold)
-      .slice(0, remainingSlots)
-      .map(e => e.id);
+    elected = entries.filter(e => e.count >= majorityThreshold).slice(0, remainingSlots).map(e => e.id);
   }
-
   return { elected, tied: false };
 }
 
-// 4. REDUTOR
 function reducer(state: ElectionState, action: Action): ElectionState {
   switch (action.type) {
     case 'SYNC_FROM_FIREBASE':
-      return action.payload; // Sobrescreve o estado local com os dados da nuvem
+      return action.payload;
 
     case 'SET_ELECTION':
       return { ...state, ...action.payload };
@@ -147,9 +139,7 @@ function reducer(state: ElectionState, action: Action): ElectionState {
     case 'UPDATE_CANDIDATE':
       return {
         ...state,
-        candidates: state.candidates.map(c =>
-          c.id === action.payload.id ? action.payload : c
-        ),
+        candidates: state.candidates.map(c => c.id === action.payload.id ? action.payload : c),
       };
 
     case 'START_SCRUTINY': {
@@ -165,13 +155,19 @@ function reducer(state: ElectionState, action: Action): ElectionState {
         resultsApproved: false,
         electedIds: [],
       };
-      action.payload.participatingCandidateIds.forEach(id => {
-        newScrutiny.votes[id] = 0;
-      });
+      action.payload.participatingCandidateIds.forEach(id => { newScrutiny.votes[id] = 0; });
+      return { ...state, scrutinies: [...state.scrutinies, newScrutiny], currentScrutinyId: newScrutiny.id };
+    }
+
+    case 'RESTART_SCRUTINY': {
       return {
         ...state,
-        scrutinies: [...state.scrutinies, newScrutiny],
-        currentScrutinyId: newScrutiny.id,
+        scrutinies: state.scrutinies.map(s => {
+          if (s.id !== action.payload) return s;
+          const resetVotes: Record<string, number> = {};
+          s.participatingCandidateIds.forEach(id => { resetVotes[id] = 0; });
+          return { ...s, votes: resetVotes, totalVotes: 0, startedAt: Date.now() };
+        })
       };
     }
 
@@ -198,16 +194,12 @@ function reducer(state: ElectionState, action: Action): ElectionState {
           elected.forEach(id => {
             const candidate = state.candidates.find(c => c.id === id);
             if (candidate && (candidate.currentRole === 'diacono' || candidate.currentRole === 'diacono_vencimento')) {
-              alerts.push(
-                `⚠️ ${candidate.name} é atualmente ${candidate.currentRole === 'diacono' ? 'Diácono' : 'Diácono em Vencimento'} e foi eleito Presbítero. Ajuste o número de vagas ou candidatos para a votação de Diáconos.`
-              );
+              alerts.push(`⚠️ ${candidate.name} é Diácono e foi eleito Presbítero. Ajuste as vagas de Diáconos.`);
             }
           });
         }
 
-        const updatedScrutinies = scrutinies.map(s =>
-          s.id === closedScrutiny.id ? { ...s, electedIds: elected } : s
-        );
+        const updatedScrutinies = scrutinies.map(s => s.id === closedScrutiny.id ? { ...s, electedIds: elected } : s);
 
         return {
           ...state,
@@ -218,17 +210,12 @@ function reducer(state: ElectionState, action: Action): ElectionState {
           electedDeacons: closedScrutiny.type === 'diacono' ? [...alreadyElected, ...elected] : state.electedDeacons,
         };
       }
-
       return { ...state, scrutinies };
     }
 
     case 'CLOSE_SCRUTINY': {
       const alerts: string[] = [];
-      const scrutinies = state.scrutinies.map(s => {
-        if (s.id !== action.payload) return s;
-        return { ...s, status: 'closed' as ScrutinyStatus };
-      });
-
+      const scrutinies = state.scrutinies.map(s => s.id === action.payload ? { ...s, status: 'closed' as ScrutinyStatus } : s);
       const closedScrutiny = scrutinies.find(s => s.id === action.payload)!;
       const alreadyElected = closedScrutiny.type === 'presbitero' ? state.electedPresbyters : state.electedDeacons;
       const slots = closedScrutiny.type === 'presbitero' ? state.presbyterSlots : state.deaconSlots;
@@ -238,20 +225,14 @@ function reducer(state: ElectionState, action: Action): ElectionState {
         elected.forEach(id => {
           const candidate = state.candidates.find(c => c.id === id);
           if (candidate && (candidate.currentRole === 'diacono' || candidate.currentRole === 'diacono_vencimento')) {
-            alerts.push(
-              `⚠️ ${candidate.name} é atualmente ${candidate.currentRole === 'diacono' ? 'Diácono' : 'Diácono em Vencimento'} e foi eleito Presbítero. Ajuste o número de vagas ou candidatos para a votação de Diáconos.`
-            );
+            alerts.push(`⚠️ ${candidate.name} é Diácono e foi eleito Presbítero. Ajuste as vagas de Diáconos.`);
           }
         });
       }
 
-      const updatedScrutinies = scrutinies.map(s =>
-        s.id === action.payload ? { ...s, electedIds: elected } : s
-      );
-
       return {
         ...state,
-        scrutinies: updatedScrutinies,
+        scrutinies: scrutinies.map(s => s.id === action.payload ? { ...s, electedIds: elected } : s),
         currentScrutinyId: null,
         alerts: [...state.alerts, ...alerts],
         electedPresbyters: closedScrutiny.type === 'presbitero' ? [...alreadyElected, ...elected] : state.electedPresbyters,
@@ -259,35 +240,18 @@ function reducer(state: ElectionState, action: Action): ElectionState {
       };
     }
 
-    case 'APPROVE_RESULTS': {
-      return {
-        ...state,
-        scrutinies: state.scrutinies.map(s =>
-          s.id === action.payload ? { ...s, resultsApproved: true } : s
-        ),
-      };
-    }
+    case 'APPROVE_RESULTS':
+      return { ...state, scrutinies: state.scrutinies.map(s => s.id === action.payload ? { ...s, resultsApproved: true } : s) };
 
-    case 'ADD_ALERT':
-      return { ...state, alerts: [...state.alerts, action.payload] };
-
-    case 'CLEAR_ALERTS':
-      return { ...state, alerts: [] };
-
+    case 'ADD_ALERT': return { ...state, alerts: [...state.alerts, action.payload] };
+    case 'CLEAR_ALERTS': return { ...state, alerts: [] };
     case 'SET_ELECTED':
-      if (action.payload.type === 'presbitero') {
-        return { ...state, electedPresbyters: action.payload.candidateIds };
-      }
-      return { ...state, electedDeacons: action.payload.candidateIds };
-
-    case 'CLEAR_CANDIDATES':
-      return { ...state, candidates: [] };
-
-    case 'RESET':
-      return { ...initialState, candidates: state.candidates };
-
-    default:
-      return state;
+      return action.payload.type === 'presbitero' 
+        ? { ...state, electedPresbyters: action.payload.candidateIds }
+        : { ...state, electedDeacons: action.payload.candidateIds };
+    case 'CLEAR_CANDIDATES': return { ...state, candidates: [] };
+    case 'RESET': return { ...initialState, candidates: state.candidates };
+    default: return state;
   }
 }
 
@@ -298,62 +262,39 @@ const ElectionContext = createContext<{
 } | null>(null);
 
 export function ElectionProvider({ children }: { children: ReactNode }) {
-  // Inicializamos o estado sem localStorage
   const [state, defaultDispatch] = useReducer(reducer, initialState);
   const stateRef = useRef(state);
 
-  // Mantém uma referência atualizada do estado para uso seguro nas funções
-  useEffect(() => {
-    stateRef.current = state;
-  }, [state]);
+  useEffect(() => { stateRef.current = state; }, [state]);
 
-  // Sincronização em Tempo Real com o Firebase
   useEffect(() => {
     const docRef = doc(db, 'elections', ELECTION_DOC_ID);
-    
-    // Fica "ouvindo" o banco de dados. Qualquer mudança cai aqui!
     const unsubscribe = onSnapshot(docRef, (snapshot) => {
       if (snapshot.exists()) {
-        const remoteState = snapshot.data() as ElectionState;
-        defaultDispatch({ type: 'SYNC_FROM_FIREBASE', payload: remoteState });
+        defaultDispatch({ type: 'SYNC_FROM_FIREBASE', payload: snapshot.data() as ElectionState });
       } else {
-        // Se for a primeira vez rodando, cria o documento no banco
         setDoc(docRef, initialState);
       }
     });
-
     return () => unsubscribe();
   }, []);
 
-  // Novo Dispatch que intercepta as ações e envia para a nuvem
   const dispatch = async (action: Action) => {
     const docRef = doc(db, 'elections', ELECTION_DOC_ID);
-
-    // PROTEÇÃO CONTRA CONCORRÊNCIA DE VOTOS (Evita choque entre urnas simultâneas)
     if (action.type === 'CAST_VOTE') {
       try {
         await runTransaction(db, async (transaction) => {
           const sfDoc = await transaction.get(docRef);
           if (!sfDoc.exists()) return;
-          
           const remoteState = sfDoc.data() as ElectionState;
-          // Calcula o voto baseando-se no estado MAIS RECENTE do servidor, e não do tablet
           const nextState = reducer(remoteState, action);
           transaction.set(docRef, nextState);
         });
-      } catch (error) {
-        console.error("Erro ao registrar voto na transação:", error);
-      }
+      } catch (error) { console.error("Erro ao registrar voto:", error); }
       return;
     }
-
-    // Para todas as outras ações (Adicionar candidato, criar Escrutínio, etc)
     const nextState = reducer(stateRef.current, action);
-    try {
-      await setDoc(docRef, nextState);
-    } catch (error) {
-      console.error("Erro ao sincronizar sistema:", error);
-    }
+    try { await setDoc(docRef, nextState); } catch (error) { console.error("Erro na sincronização:", error); }
   };
 
   const resolveScrutinyResults = (scrutiny: Scrutiny, slots: number, alreadyElected: string[] = []) =>
