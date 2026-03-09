@@ -92,7 +92,10 @@ export default function Admin() {
       const sortedFromLast = Object.entries(lastScrutiny.votes)
         .filter(([id]) => lastScrutiny.participatingCandidateIds.includes(id) && !alreadyElected.includes(id))
         .sort((a, b) => {
+          // 1º CRITÉRIO: Quantidade de votos do maior para o menor
           if (b[1] !== a[1]) return b[1] - a[1];
+          
+          // 2º CRITÉRIO (DESEMPATE): Candidato mais velho tem preferência
           const ca = state.candidates.find(c => c.id === a[0]);
           const cb = state.candidates.find(c => c.id === b[0]);
           if (!ca || !cb) return 0;
@@ -399,7 +402,6 @@ export default function Admin() {
                         <div className="flex items-center justify-between mb-2">
                           <p className="font-semibold">{s.type === 'presbitero' ? 'Presbíteros' : 'Diáconos'} — {s.round}º escrutínio ({s.totalVotes} votos)</p>
                           <div className="flex items-center gap-2">
-                            {/* NOVO: Botão para reiniciar escrutínio fechado */}
                             {!isVotingOpen && (
                               <Button variant="outline" size="sm" onClick={() => handleRestartScrutiny(s.id)} className="text-destructive border-destructive hover:bg-destructive/10">
                                 <RotateCcw className="w-4 h-4 mr-1" /> Reiniciar
@@ -419,7 +421,6 @@ export default function Admin() {
                               <span className="font-mono">{v} votos</span>
                             </div>
                           ))}
-                          {/* Exibe votos em branco no painel */}
                           <div className="flex justify-between mt-2 pt-2 border-t border-muted-foreground/20">
                             <span className="font-semibold text-muted-foreground">Votos em Branco</span>
                             <span className="font-mono text-muted-foreground">{s.blankVotes || 0} votos</span>
