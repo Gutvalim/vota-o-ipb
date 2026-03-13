@@ -159,7 +159,7 @@ export default function DataShow() {
         
         <div className="text-center mb-6 shrink-0 mt-4">
           <div className="flex items-center justify-center gap-6 mb-2">
-            <img src={logoIpnb} alt="Logo IPNB" className="w-32 h-32 object-contain rounded-full" />
+            <img src={logoIpnb} alt="Logo IPNB" className="w-80 h-80 object-contain rounded-full" />
             <h1 className="text-5xl md:text-7xl font-display font-bold text-primary-foreground">
               Resultado — {latestApproved.type === 'presbitero' ? 'Presbíteros' : 'Diáconos'}
             </h1>
