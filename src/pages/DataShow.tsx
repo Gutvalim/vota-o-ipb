@@ -125,7 +125,7 @@ export default function DataShow() {
     return (
       <div className="min-h-screen bg-primary relative flex flex-col items-center justify-center p-8 overflow-hidden">
         <BackButton />
-        <img src={logoIpnb} alt="Logo IPNB" className="w-40 h-40 object-contain rounded-full mb-12 animate-pulse" />
+        <img src={logoIpnb} alt="Logo IPNB" className="w-[25rem] h-[25rem] object-contain rounded-full mb-12 animate-pulse" />
         <h1 className="text-7xl font-display font-bold text-primary-foreground mb-6 text-center">
           Votação Encerrada
         </h1>
