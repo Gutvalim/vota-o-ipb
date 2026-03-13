@@ -2,8 +2,7 @@ import { useEffect, useState } from 'react';
 import { useElection } from '@/contexts/ElectionContext';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Vote, Users, Clock, ArrowLeft } from 'lucide-react';
-import logoIpnb from '@/assets/logo_ipnb.png';
+import { Vote, Users, Clock, Trophy, ArrowLeft } from 'lucide-react';
 
 export default function DataShow() {
   const { state } = useElection();
@@ -52,7 +51,7 @@ export default function DataShow() {
     </Button>
   );
 
-  // TELA 1: AGUARDANDO (Fontes Aumentadas)
+  // TELA 1: AGUARDANDO
   if (!isOpen && !latestApproved && !pendingApproval) {
     return (
       <div className="min-h-screen bg-primary relative flex flex-col items-center justify-center p-8 overflow-hidden">
@@ -61,20 +60,21 @@ export default function DataShow() {
         <h1 className="text-6xl md:text-8xl font-display font-bold text-primary-foreground mb-6 text-center leading-tight">
           {state.title || 'Sistema de Votação'}
         </h1>
-        <p className="text-4xl text-primary-foreground/50 font-display">
+        {/* NOVO: Adicionado text-center aqui */}
+        <p className="text-3xl md:text-4xl text-primary-foreground/50 font-display text-center">
           Igreja Presbiteriana do Brasil
         </p>
         {state.date && (
-          <p className="text-3xl text-primary-foreground/30 mt-6 font-mono">
+          <p className="text-3xl text-primary-foreground/30 mt-6 font-mono text-center">
             {new Date(state.date + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })}
           </p>
         )}
-        <p className="text-primary-foreground/30 mt-16 text-3xl animate-pulse">Aguardando início da votação...</p>
+        <p className="text-primary-foreground/30 mt-16 text-3xl animate-pulse text-center">Aguardando início da votação...</p>
       </div>
     );
   }
 
-  // TELA 2: VOTAÇÃO EM ANDAMENTO (Fontes Aumentadas)
+  // TELA 2: VOTAÇÃO EM ANDAMENTO
   if (isOpen && currentScrutiny) {
     return (
       <div className="min-h-screen bg-primary relative flex flex-col p-8 overflow-hidden">
@@ -119,7 +119,7 @@ export default function DataShow() {
     );
   }
 
-  // TELA 3: AGUARDANDO APURAÇÃO (Fontes Aumentadas)
+  // TELA 3: AGUARDANDO APURAÇÃO
   if (pendingApproval) {
     return (
       <div className="min-h-screen bg-primary relative flex flex-col items-center justify-center p-8 overflow-hidden">
@@ -128,14 +128,14 @@ export default function DataShow() {
         <h1 className="text-7xl font-display font-bold text-primary-foreground mb-6 text-center">
           Votação Encerrada
         </h1>
-        <p className="text-4xl text-primary-foreground/50 mt-4">
+        <p className="text-4xl text-primary-foreground/50 mt-4 text-center">
           Aguardando apuração do resultado...
         </p>
       </div>
     );
   }
 
-  // TELA 4: RESULTADOS (A Mágica do Layout Adaptativo e Fontes Gigantes)
+  // TELA 4: RESULTADOS
   if (latestApproved) {
     const sortedEntries = Object.entries(latestApproved.votes)
       .filter(([id]) => latestApproved.participatingCandidateIds.includes(id))
@@ -150,17 +150,15 @@ export default function DataShow() {
     const hasBlankVotes = (latestApproved.blankVotes || 0) > 0;
     const totalItems = sortedEntries.length + (hasBlankVotes ? 1 : 0);
     
-    // Se tiver mais de 6 itens, divide a tela em 2 colunas para caber tudo enorme sem rolar
     const useTwoColumns = totalItems > 6;
 
     return (
       <div className="min-h-screen bg-primary relative flex flex-col p-6 md:p-8 overflow-hidden">
         <BackButton />
         
-        {/* Cabeçalho do Resultado */}
         <div className="text-center mb-6 shrink-0 mt-4">
           <div className="flex items-center justify-center gap-6 mb-2">
-            <img src={logoIpnb} alt="Logo IPNB" className="w-32 h-32 object-contain rounded-full" />
+            <Trophy className="w-16 h-16 text-gold" />
             <h1 className="text-5xl md:text-7xl font-display font-bold text-primary-foreground">
               Resultado — {latestApproved.type === 'presbitero' ? 'Presbíteros' : 'Diáconos'}
             </h1>
@@ -170,7 +168,6 @@ export default function DataShow() {
           </p>
         </div>
 
-        {/* Grade Inteligente de Candidatos */}
         <div className="flex-1 flex items-center justify-center w-full">
           <div className={`w-full max-w-[95%] grid gap-4 md:gap-5 ${useTwoColumns ? 'lg:grid-cols-2' : 'max-w-4xl grid-cols-1'}`}>
             
@@ -228,7 +225,6 @@ export default function DataShow() {
               );
             })}
 
-            {/* Cartão de Votos em Branco */}
             {hasBlankVotes && (
               <div className="flex items-center gap-4 py-3 px-5 rounded-2xl transition-all bg-secondary/20 border-2 border-secondary/30">
                 <span className="text-3xl md:text-4xl font-bold w-12 text-center text-primary-foreground/30">-</span>
@@ -252,7 +248,6 @@ export default function DataShow() {
           </div>
         </div>
 
-        {/* Rodapé fixo */}
         <p className="text-center text-primary-foreground/30 text-xl font-bold mt-6 shrink-0">
           Em caso de empate, prevalece o candidato mais velho conforme Manual Presbiteriano
         </p>
