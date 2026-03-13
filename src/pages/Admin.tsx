@@ -46,12 +46,44 @@ export default function Admin() {
     dispatch({ type: 'SET_ELECTION', payload: { [field]: value } });
   };
 
+  // NOVO: Função de upload com compressão automática de imagem
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
     const reader = new FileReader();
     reader.onload = (ev) => {
-      setForm(f => ({ ...f, photo: ev.target?.result as string }));
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        // Define um tamanho máximo perfeito para avatares (evita estourar o limite de 1MB do Firebase)
+        const MAX_WIDTH = 300; 
+        const MAX_HEIGHT = 300;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > MAX_WIDTH) {
+            height *= MAX_WIDTH / width;
+            width = MAX_WIDTH;
+          }
+        } else {
+          if (height > MAX_HEIGHT) {
+            width *= MAX_HEIGHT / height;
+            height = MAX_HEIGHT;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, width, height);
+
+        // Comprime para formato JPEG com 70% de qualidade
+        const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
+        setForm(f => ({ ...f, photo: compressedBase64 }));
+      };
+      img.src = ev.target?.result as string;
     };
     reader.readAsDataURL(file);
   };
@@ -408,7 +440,6 @@ export default function Admin() {
                     return (
                       <div key={s.id} className="p-4 rounded-lg border bg-muted/50 text-sm">
                         
-                        {/* NOVO: Caixa flexível (flex-col e flex-row) para celular não apertar a tag de Liberado */}
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-3 border-b pb-3 border-muted-foreground/20">
                           <p className="font-semibold text-base">
                             {s.type === 'presbitero' ? 'Presbíteros' : 'Diáconos'} — {s.round}º escrutínio ({s.totalVotes} votos)
