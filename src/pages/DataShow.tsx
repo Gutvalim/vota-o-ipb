@@ -57,7 +57,7 @@ export default function DataShow() {
     return (
       <div className="min-h-screen bg-primary relative flex flex-col items-center justify-center p-8 overflow-hidden">
         <BackButton />
-        <img src={logoIpnb} alt="Logo IPNB" className="w-32 h-32 object-contain rounded-full mb-10" />
+        <img src={logoIpnb} alt="Logo IPNB" className="w-80 h-80 object-contain rounded-full mb-10" />
         <h1 className="text-6xl md:text-8xl font-display font-bold text-primary-foreground mb-6 text-center leading-tight">
           {state.title || 'Sistema de Votação'}
         </h1>
@@ -125,7 +125,7 @@ export default function DataShow() {
     return (
       <div className="min-h-screen bg-primary relative flex flex-col items-center justify-center p-8 overflow-hidden">
         <BackButton />
-        <img src={logoIpnb} alt="Logo IPNB" className="w-40 h-40 object-contain rounded-full mb-12 animate-pulse" />
+        <img src={logoIpnb} alt="Logo IPNB" className="w-[25rem] h-[25rem] object-contain rounded-full mb-12 animate-pulse" />
         <h1 className="text-7xl font-display font-bold text-primary-foreground mb-6 text-center">
           Votação Encerrada
         </h1>
@@ -159,7 +159,7 @@ export default function DataShow() {
         
         <div className="text-center mb-6 shrink-0 mt-4">
           <div className="flex items-center justify-center gap-6 mb-2">
-            <img src={logoIpnb} alt="Logo IPNB" className="w-32 h-32 object-contain rounded-full" />
+            <img src={logoIpnb} alt="Logo IPNB" className="w-80 h-80 object-contain rounded-full" />
             <h1 className="text-5xl md:text-7xl font-display font-bold text-primary-foreground">
               Resultado — {latestApproved.type === 'presbitero' ? 'Presbíteros' : 'Diáconos'}
             </h1>
