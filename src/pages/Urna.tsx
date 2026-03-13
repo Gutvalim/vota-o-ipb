@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useElection } from '@/contexts/ElectionContext';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, CheckCircle2, Vote, Users } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Vote, Users, Sun, Moon } from 'lucide-react';
 import { toast } from 'sonner';
 
 const playConfirmSound = () => {
@@ -45,6 +45,7 @@ export default function Urna() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [hasVoted, setHasVoted] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [highContrast, setHighContrast] = useState(false); // NOVO: Estado do Alto Contraste
 
   const currentScrutiny = state.scrutinies.find(s => s.id === state.currentScrutinyId);
   const isOpen = currentScrutiny?.status === 'open';
@@ -97,7 +98,6 @@ export default function Urna() {
   if (!isOpen || votingClosed) {
     return (
       <div className="h-screen flex flex-col items-center justify-center bg-primary p-8 overflow-hidden relative">
-        {/* Botão Voltar Sutil restaurado na tela de espera */}
         <Button variant="ghost" size="icon" onClick={() => navigate('/')} className="absolute top-4 left-4 text-primary-foreground/30 hover:text-primary-foreground hover:bg-primary-foreground/10">
           <ArrowLeft className="w-6 h-6" />
         </Button>
@@ -135,12 +135,22 @@ export default function Urna() {
     <div className="h-screen bg-primary flex flex-col overflow-hidden relative">
       <header className="shrink-0 p-3 md:p-4 border-b border-primary-foreground/10">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            {/* NOVO: Botão Voltar Sutil (Apenas ícone translúcido) */}
-            <Button variant="ghost" size="icon" onClick={() => navigate('/')} className="text-primary-foreground/20 hover:text-primary-foreground hover:bg-primary-foreground/10">
-              <ArrowLeft className="w-7 h-7" />
-            </Button>
-            <div>
+          <div className="flex flex-col md:flex-row md:items-center gap-3 md:gap-4">
+            <div className="flex items-center gap-2">
+              <Button variant="ghost" size="icon" onClick={() => navigate('/')} className="text-primary-foreground/20 hover:text-primary-foreground hover:bg-primary-foreground/10">
+                <ArrowLeft className="w-7 h-7" />
+              </Button>
+              {/* NOVO: Botão de Alto Contraste */}
+              <Button 
+                variant="outline" 
+                onClick={() => setHighContrast(!highContrast)}
+                className={`transition-colors border-2 ${highContrast ? 'bg-white text-black border-white hover:bg-gray-200' : 'bg-transparent text-primary-foreground border-primary-foreground/30 hover:bg-primary-foreground/10'}`}
+              >
+                {highContrast ? <Moon className="w-5 h-5 mr-2" /> : <Sun className="w-5 h-5 mr-2" />}
+                <span className="font-bold">{highContrast ? 'Modo Escuro' : 'Alto Contraste'}</span>
+              </Button>
+            </div>
+            <div className="ml-2 md:ml-0">
               <h1 className="text-2xl md:text-3xl font-display font-bold text-primary-foreground leading-none">
                 {currentScrutiny.type === 'presbitero' ? 'Presbíteros' : 'Diáconos'}
               </h1>
@@ -149,7 +159,7 @@ export default function Urna() {
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2 bg-primary-foreground/10 px-5 py-2 md:py-3 rounded-xl">
+          <div className="flex items-center gap-2 bg-primary-foreground/10 px-5 py-2 md:py-3 rounded-xl hidden sm:flex">
             <span className="text-primary-foreground/60 text-lg md:text-xl font-bold">Escolhidos:</span>
             <span className={`font-bold text-2xl md:text-3xl ${selectedIds.length === effectiveMax ? 'text-gold' : 'text-primary-foreground'}`}>
               {selectedIds.length}/{effectiveMax}
@@ -158,11 +168,25 @@ export default function Urna() {
         </div>
       </header>
 
-      {/* Grid restaurado com Flexbox para centralizar, mantendo tamanhos grandes para acessibilidade */}
       <main className="flex-1 flex flex-col items-center justify-center p-2 md:p-4 overflow-y-auto">
         <div className="w-full max-w-7xl flex flex-wrap justify-center gap-3 md:gap-5">
           {participatingCandidates.map(c => {
             const isSelected = selectedIds.includes(c.id);
+            
+            // Lógica de cores baseada no Alto Contraste
+            const cardBaseStyle = highContrast
+              ? 'bg-white border-[3px] border-gray-300 hover:bg-gray-100'
+              : 'bg-primary-foreground/5 border-[3px] border-transparent hover:bg-primary-foreground/10';
+              
+            const cardSelectedStyle = highContrast
+              ? 'bg-gray-200 border-[3px] border-black ring-4 ring-black/30 scale-[1.02]'
+              : 'bg-gold/20 border-[3px] border-gold ring-4 ring-gold/30 scale-[1.02]';
+              
+            const textStyle = highContrast ? 'text-black' : 'text-primary-foreground';
+            const iconBgStyle = highContrast ? 'bg-gray-100' : 'bg-primary-foreground/10';
+            const iconColorStyle = highContrast ? 'text-gray-500' : 'text-primary-foreground/30';
+            const checkBgStyle = highContrast ? 'bg-black text-white' : 'bg-gold text-accent-foreground';
+
             return (
               <button
                 key={c.id}
@@ -170,27 +194,24 @@ export default function Urna() {
                 className={`
                   w-[45%] sm:w-[30%] md:w-[22%] lg:w-[18%] max-w-[220px] shrink-0
                   relative p-3 md:p-4 rounded-xl transition-all duration-200 text-center flex flex-col items-center justify-center
-                  ${isSelected
-                    ? 'bg-gold/20 border-4 border-gold ring-4 ring-gold/30 scale-[1.02]'
-                    : 'bg-primary-foreground/5 border-4 border-transparent hover:bg-primary-foreground/10'
-                  }
+                  ${isSelected ? cardSelectedStyle : cardBaseStyle}
                 `}
               >
-                <div className="w-16 h-16 md:w-24 md:h-24 mb-3 rounded-full bg-primary-foreground/10 overflow-hidden shrink-0 shadow-lg">
+                <div className={`w-16 h-16 md:w-24 md:h-24 mb-3 rounded-full overflow-hidden shrink-0 shadow-lg ${iconBgStyle}`}>
                   {c.photo ? (
                     <img src={c.photo} alt={c.name} className="w-full h-full object-cover" />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center">
-                      <Users className="w-8 h-8 md:w-12 md:h-12 text-primary-foreground/30" />
+                      <Users className={`w-8 h-8 md:w-12 md:h-12 ${iconColorStyle}`} />
                     </div>
                   )}
                 </div>
-                <p className="text-primary-foreground font-bold text-xl md:text-2xl leading-tight line-clamp-2">
+                <p className={`font-bold text-xl md:text-2xl leading-tight line-clamp-2 ${textStyle}`}>
                   {c.name}
                 </p>
                 {isSelected && (
-                  <div className="absolute top-2 right-2 md:top-3 md:right-3 w-8 h-8 md:w-10 md:h-10 rounded-full bg-gold flex items-center justify-center shadow-lg">
-                    <CheckCircle2 className="w-5 h-5 md:w-7 md:h-7 text-accent-foreground" />
+                  <div className={`absolute top-2 right-2 md:top-3 md:right-3 w-8 h-8 md:w-10 md:h-10 rounded-full flex items-center justify-center shadow-lg ${checkBgStyle}`}>
+                    <CheckCircle2 className="w-5 h-5 md:w-7 md:h-7" />
                   </div>
                 )}
               </button>
@@ -199,12 +220,14 @@ export default function Urna() {
         </div>
       </main>
 
-      {/* Footer Compactado: Reduzi a altura e o padding para dar espaço aos candidatos no topo */}
+      {/* NOVO RODAPÉ: Botões ancorados à direita para o "Toque Duplo" */}
       <footer className="shrink-0 p-3 md:p-4 border-t border-primary-foreground/10 bg-primary/95 backdrop-blur shadow-[0_-10px_30px_rgba(0,0,0,0.3)]">
-        <div className="max-w-7xl mx-auto flex justify-center items-center h-full">
-          {showConfirm ? (
-            <div className="w-full flex flex-col sm:flex-row items-center justify-between gap-3">
-              <p className="text-primary-foreground font-display font-bold text-xl md:text-2xl text-center">
+        <div className="max-w-7xl mx-auto flex items-center justify-between h-full">
+          
+          {/* Lado Esquerdo: Mensagens */}
+          <div className="flex-1 pr-4 hidden sm:block">
+            {showConfirm ? (
+              <p className="text-primary-foreground font-display font-bold text-lg md:text-2xl">
                 {selectedIds.length === 0 
                   ? `Confirmar ${blankCount} VOTO(S) EM BRANCO?`
                   : blankCount > 0 
@@ -212,33 +235,50 @@ export default function Urna() {
                     : `Confirmar voto em ${selectedIds.length} candidato(s)?`
                 }
               </p>
-              <div className="flex gap-4 w-full sm:w-auto">
-                {/* Botões de confirmação levemente menores verticalmente */}
-                <Button variant="ghost" onClick={() => setShowConfirm(false)} className="flex-1 sm:flex-none text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground text-xl md:text-2xl py-7 px-6">
-                  Corrigir
-                </Button>
-                <Button onClick={handleConfirm} className="flex-1 sm:flex-none bg-success text-success-foreground hover:bg-success/90 font-bold text-2xl md:text-3xl px-12 py-7 animate-pulse-ring">
-                  CONFIRMAR
-                </Button>
+            ) : (
+              <div className="flex items-center gap-3">
+                <Vote className="w-8 h-8 text-primary-foreground/30" />
+                <p className="text-primary-foreground/50 text-xl font-bold">
+                  Selecione os nomes acima e toque em VOTAR à direita.
+                </p>
               </div>
-            </div>
-          ) : (
-            /* Botão Votar Compactado: Reduzi padding vertical para economizar espaço de tela */
+            )}
+          </div>
+
+          {/* Lado Direito: Botões Ancorados */}
+          <div className="flex items-center justify-end gap-3 w-full sm:w-auto shrink-0">
+            {showConfirm && (
+              <Button variant="ghost" onClick={() => setShowConfirm(false)} className="text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground text-lg md:text-xl py-6 md:py-8 px-4 md:px-6">
+                Corrigir
+              </Button>
+            )}
+            
             <Button
-              onClick={() => setShowConfirm(true)}
+              onClick={showConfirm ? handleConfirm : () => setShowConfirm(true)}
               className={`
-                w-full md:w-auto font-bold text-2xl md:text-4xl px-8 py-6 md:px-24 md:py-8 shadow-xl transition-all
-                ${selectedIds.length === 0 ? 'bg-secondary text-secondary-foreground hover:bg-secondary/80' : 'bg-gold text-accent-foreground hover:bg-gold-light'}
+                font-bold text-xl md:text-3xl py-6 md:py-8 shadow-xl transition-all flex-1 sm:flex-none
+                w-full sm:w-[260px] md:w-[320px] /* Tamanho fixo garante que o botão não mude de lugar */
+                ${showConfirm ? 'bg-success text-success-foreground hover:bg-success/90 animate-pulse-ring' : 
+                  selectedIds.length === 0 ? 'bg-secondary text-secondary-foreground hover:bg-secondary/80' : 'bg-gold text-accent-foreground hover:bg-gold-light'}
               `}
             >
-              {selectedIds.length === 0 ? (
-                `VOTAR EM BRANCO (${blankCount})`
+              {showConfirm ? (
+                'CONFIRMAR'
+              ) : selectedIds.length === 0 ? (
+                `VOTAR EM BRANCO`
               ) : (
-                <><Vote className="w-8 h-8 md:w-10 md:h-10 mr-3" /> VOTAR ({selectedIds.length}/{effectiveMax})</>
+                <><Vote className="w-6 h-6 md:w-8 md:h-8 mr-2" /> VOTAR ({selectedIds.length})</>
               )}
             </Button>
-          )}
+          </div>
+
         </div>
+        {/* Mensagem mobile extra caso a tela seja muito pequena */}
+        {showConfirm && (
+          <p className="text-primary-foreground font-bold text-center mt-3 sm:hidden">
+            {selectedIds.length === 0 ? `Confirmar ${blankCount} BRANCOS?` : `Confirmar ${selectedIds.length} candidato(s)?`}
+          </p>
+        )}
       </footer>
     </div>
   );
