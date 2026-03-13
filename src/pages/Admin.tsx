@@ -86,28 +86,25 @@ export default function Admin() {
     let initialSelected: string[] = [];
 
     if (nextRound === 1) {
-      // REGRA DO 1º ESCRUTÍNIO: Pré-seleciona só se a quantidade de candidatos for MENOR que o dobro de vagas
       if (eligibleCandidates.length < (slots * 2)) {
         initialSelected = eligibleCandidates.map(c => c.id);
       } else {
-        initialSelected = []; // Como há muitos candidatos, vem tudo desmarcado
+        initialSelected = [];
       }
     } else {
-      // 2º ESCRUTÍNIO EM DIANTE
       if (lastScrutiny) {
         eligibleCandidates = eligibleCandidates.filter(c => lastScrutiny.participatingCandidateIds.includes(c.id));
       }
 
-      // 3º ESCRUTÍNIO EM DIANTE (Afunilamento e Desempate por Idade)
       if (nextRound >= 3 && lastScrutiny) {
         const sortedFromLast = Object.entries(lastScrutiny.votes)
           .filter(([id]) => lastScrutiny.participatingCandidateIds.includes(id) && !alreadyElected.includes(id))
           .sort((a, b) => {
-            if (b[1] !== a[1]) return b[1] - a[1]; // Ordena por votos
+            if (b[1] !== a[1]) return b[1] - a[1];
             const ca = state.candidates.find(c => c.id === a[0]);
             const cb = state.candidates.find(c => c.id === b[0]);
             if (!ca || !cb) return 0;
-            return new Date(ca.birthDate).getTime() - new Date(cb.birthDate).getTime(); // Desempate por idade (mais velho sobe)
+            return new Date(ca.birthDate).getTime() - new Date(cb.birthDate).getTime();
           });
           
         const funnelCount = remainingSlots * 2;
@@ -404,37 +401,46 @@ export default function Admin() {
 
             {state.scrutinies.filter(s => s.status === 'closed').length > 0 && (
               <div className="mt-4">
-                <h3 className="font-semibold text-sm text-muted-foreground mb-2">Escrutínios Encerrados</h3>
-                <div className="space-y-2">
+                <h3 className="font-semibold text-sm text-muted-foreground mb-4">Escrutínios Encerrados</h3>
+                <div className="space-y-4">
                   {state.scrutinies.filter(s => s.status === 'closed').reverse().map(s => {
                     const sorted = Object.entries(s.votes).filter(([id]) => s.participatingCandidateIds.includes(id)).sort((a, b) => b[1] - a[1]);
                     return (
-                      <div key={s.id} className="p-3 rounded border bg-muted/50 text-sm">
-                        <div className="flex items-center justify-between mb-2">
-                          <p className="font-semibold">{s.type === 'presbitero' ? 'Presbíteros' : 'Diáconos'} — {s.round}º escrutínio ({s.totalVotes} votos)</p>
-                          <div className="flex items-center gap-2">
+                      <div key={s.id} className="p-4 rounded-lg border bg-muted/50 text-sm">
+                        
+                        {/* NOVO: Caixa flexível (flex-col e flex-row) para celular não apertar a tag de Liberado */}
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-3 border-b pb-3 border-muted-foreground/20">
+                          <p className="font-semibold text-base">
+                            {s.type === 'presbitero' ? 'Presbíteros' : 'Diáconos'} — {s.round}º escrutínio ({s.totalVotes} votos)
+                          </p>
+                          <div className="flex flex-wrap items-center gap-2 shrink-0">
                             {!isVotingOpen && (
-                              <Button variant="outline" size="sm" onClick={() => handleRestartScrutiny(s.id)} className="text-destructive border-destructive hover:bg-destructive/10">
+                              <Button variant="outline" size="sm" onClick={() => handleRestartScrutiny(s.id)} className="text-destructive border-destructive hover:bg-destructive/10 whitespace-nowrap">
                                 <RotateCcw className="w-4 h-4 mr-1" /> Reiniciar
                               </Button>
                             )}
                             {!s.resultsApproved ? (
-                              <Button size="sm" onClick={() => handleApproveResults(s.id)} className="bg-gold text-accent-foreground hover:bg-gold-light">
+                              <Button size="sm" onClick={() => handleApproveResults(s.id)} className="bg-gold text-accent-foreground hover:bg-gold-light whitespace-nowrap">
                                 <Eye className="w-4 h-4 mr-1" /> Aprovar Resultado
                               </Button>
-                            ) : <Badge className="bg-success text-success-foreground">✓ Liberado</Badge>}
+                            ) : (
+                              <Badge className="bg-success text-success-foreground whitespace-nowrap px-3 py-1 flex items-center gap-1">
+                                <CheckCircle2 className="w-3 h-3" /> Liberado
+                              </Badge>
+                            )}
                           </div>
                         </div>
-                        <div className="space-y-1">
+
+                        <div className="space-y-2">
                           {sorted.map(([cId, v]) => (
-                            <div key={cId} className="flex justify-between">
+                            <div key={cId} className="flex justify-between items-center">
                               <span className={s.electedIds.includes(cId) ? 'font-bold text-success' : ''}>{s.electedIds.includes(cId) && '✓ '}{state.candidates.find(x => x.id === cId)?.name}</span>
-                              <span className="font-mono">{v} votos</span>
+                              <span className="font-mono bg-background px-2 py-0.5 rounded text-xs">{v} votos</span>
                             </div>
                           ))}
-                          <div className="flex justify-between mt-2 pt-2 border-t border-muted-foreground/20">
-                            <span className="font-semibold text-muted-foreground">Votos em Branco</span>
-                            <span className="font-mono text-muted-foreground">{s.blankVotes || 0} votos</span>
+                          <div className="flex justify-between items-center mt-3 pt-3 border-t border-muted-foreground/20">
+                            <span className="font-semibold text-muted-foreground uppercase text-xs tracking-wider">Votos em Branco</span>
+                            <span className="font-mono text-muted-foreground bg-background px-2 py-0.5 rounded text-xs">{s.blankVotes || 0} votos</span>
                           </div>
                         </div>
                       </div>
