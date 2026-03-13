@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { useElection } from '@/contexts/ElectionContext';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Vote, Users, Clock, Trophy, ArrowLeft } from 'lucide-react';
+import { Vote, Users, Clock, ArrowLeft } from 'lucide-react';
+import logoIpnb from '@/assets/logo_ipnb.png';
 
 export default function DataShow() {
   const { state } = useElection();
