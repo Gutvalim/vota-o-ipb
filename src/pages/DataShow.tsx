@@ -2,8 +2,7 @@ import { useEffect, useState } from 'react';
 import { useElection } from '@/contexts/ElectionContext';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Vote, Users, Clock, ArrowLeft } from 'lucide-react';
-import logoIpnb from '@/assets/logo_ipnb.png';
+import { Vote, Users, Clock, Trophy, ArrowLeft } from 'lucide-react';
 
 export default function DataShow() {
   const { state } = useElection();
@@ -48,99 +47,94 @@ export default function DataShow() {
       onClick={() => navigate('/')}
       className="absolute top-4 left-4 text-primary-foreground/30 hover:text-primary-foreground hover:bg-primary-foreground/10 z-50 transition-colors"
     >
-      <ArrowLeft className="w-5 h-5 mr-2" /> Voltar
+      <ArrowLeft className="w-6 h-6 mr-2" /> Voltar
     </Button>
   );
 
-  // WAITING STATE
+  // TELA 1: AGUARDANDO (Fontes Aumentadas)
   if (!isOpen && !latestApproved && !pendingApproval) {
     return (
-      <div className="min-h-screen bg-primary relative flex flex-col items-center justify-center p-8">
+      <div className="min-h-screen bg-primary relative flex flex-col items-center justify-center p-8 overflow-hidden">
         <BackButton />
-        <Vote className="w-20 h-20 text-gold mb-8" />
-        <h1 className="text-5xl font-display font-bold text-primary-foreground mb-4 text-center">
-          {state.title || 'Sistema de Votação Eletrônica'}
+        <Vote className="w-32 h-32 text-gold mb-10" />
+        <h1 className="text-6xl md:text-8xl font-display font-bold text-primary-foreground mb-6 text-center leading-tight">
+          {state.title || 'Sistema de Votação'}
         </h1>
-        <p className="text-2xl text-primary-foreground/50 font-display">
+        <p className="text-4xl text-primary-foreground/50 font-display">
           Igreja Presbiteriana do Brasil
         </p>
         {state.date && (
-          <p className="text-xl text-primary-foreground/30 mt-4">
-            {new Date(state.date + 'T00:00:00').toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' })}
+          <p className="text-3xl text-primary-foreground/30 mt-6 font-mono">
+            {new Date(state.date + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })}
           </p>
         )}
-        <p className="text-primary-foreground/20 mt-12 text-lg">Aguardando início da votação...</p>
+        <p className="text-primary-foreground/30 mt-16 text-3xl animate-pulse">Aguardando início da votação...</p>
       </div>
     );
   }
 
-  // VOTING IN PROGRESS
+  // TELA 2: VOTAÇÃO EM ANDAMENTO (Fontes Aumentadas)
   if (isOpen && currentScrutiny) {
     return (
-      <div className="min-h-screen bg-primary relative flex flex-col p-8">
+      <div className="min-h-screen bg-primary relative flex flex-col p-8 overflow-hidden">
         <BackButton />
-        <div className="text-center mb-12">
-          <h1 className="text-4xl font-display font-bold text-primary-foreground mb-2">
+        <div className="text-center mb-12 shrink-0">
+          <h1 className="text-5xl md:text-7xl font-display font-bold text-primary-foreground mb-4">
             {state.title || 'Votação em Andamento'}
           </h1>
-          <p className="text-2xl text-gold font-display">
+          <p className="text-4xl text-gold font-display font-bold">
             {currentScrutiny.type === 'presbitero' ? 'Eleição de Presbíteros' : 'Eleição de Diáconos'} — {currentScrutiny.round}º Escrutínio
           </p>
         </div>
 
         <div className="flex-1 flex items-center justify-center">
-          <div className="grid md:grid-cols-2 gap-16 w-full max-w-4xl">
-            <div className="text-center">
-              <Clock className="w-12 h-12 text-gold mx-auto mb-4" />
-              <p className="text-primary-foreground/50 text-lg mb-2">Tempo Decorrido</p>
-              <p className="text-8xl font-mono font-bold text-primary-foreground tracking-wider">
+          <div className="grid md:grid-cols-2 gap-20 w-full max-w-6xl">
+            <div className="text-center bg-primary-foreground/5 p-12 rounded-3xl border border-primary-foreground/10">
+              <Clock className="w-20 h-20 text-gold mx-auto mb-6" />
+              <p className="text-primary-foreground/50 text-3xl mb-4 uppercase tracking-widest font-bold">Tempo</p>
+              <p className="text-[10rem] leading-none font-mono font-bold text-primary-foreground tracking-tight">
                 {formatTime(elapsed)}
               </p>
             </div>
-            <div className="text-center">
-              <Users className="w-12 h-12 text-gold mx-auto mb-4" />
-              <p className="text-primary-foreground/50 text-lg mb-2">Votos Computados</p>
-              <p className="text-8xl font-mono font-bold text-primary-foreground">
+            <div className="text-center bg-primary-foreground/5 p-12 rounded-3xl border border-primary-foreground/10">
+              <Users className="w-20 h-20 text-gold mx-auto mb-6" />
+              <p className="text-primary-foreground/50 text-3xl mb-4 uppercase tracking-widest font-bold">Votos</p>
+              <p className="text-[10rem] leading-none font-mono font-bold text-primary-foreground">
                 {currentScrutiny.totalVotes}
               </p>
-              <p className="text-2xl text-primary-foreground/40 mt-2">
+              <p className="text-3xl text-primary-foreground/40 mt-4 font-bold">
                 de {state.voterGoal} eleitores
               </p>
-              <div className="mt-6 w-full bg-primary-foreground/10 rounded-full h-4 overflow-hidden">
+              <div className="mt-8 w-full bg-primary-foreground/10 rounded-full h-6 overflow-hidden">
                 <div
                   className="h-full bg-gold rounded-full transition-all duration-500"
                   style={{ width: `${progress}%` }}
                 />
               </div>
-              <p className="text-primary-foreground/30 text-sm mt-2">{Math.round(progress)}%</p>
             </div>
           </div>
         </div>
-
-        <p className="text-center text-primary-foreground/20 text-sm">
-          Os resultados serão exibidos após o encerramento e apuração pelo administrador
-        </p>
       </div>
     );
   }
 
-  // PENDING APPROVAL
+  // TELA 3: AGUARDANDO APURAÇÃO (Fontes Aumentadas)
   if (pendingApproval) {
     return (
-      <div className="min-h-screen bg-primary relative flex flex-col items-center justify-center p-8">
+      <div className="min-h-screen bg-primary relative flex flex-col items-center justify-center p-8 overflow-hidden">
         <BackButton />
-        <Vote className="w-20 h-20 text-gold mb-8 animate-pulse" />
-        <h1 className="text-4xl font-display font-bold text-primary-foreground mb-4 text-center">
+        <Vote className="w-40 h-40 text-gold mb-12 animate-pulse" />
+        <h1 className="text-7xl font-display font-bold text-primary-foreground mb-6 text-center">
           Votação Encerrada
         </h1>
-        <p className="text-xl text-primary-foreground/50 mt-4">
+        <p className="text-4xl text-primary-foreground/50 mt-4">
           Aguardando apuração do resultado...
         </p>
       </div>
     );
   }
 
-  // RESULTS (only approved)
+  // TELA 4: RESULTADOS (A Mágica do Layout Adaptativo e Fontes Gigantes)
   if (latestApproved) {
     const sortedEntries = Object.entries(latestApproved.votes)
       .filter(([id]) => latestApproved.participatingCandidateIds.includes(id))
@@ -152,21 +146,33 @@ export default function DataShow() {
         return new Date(ca.birthDate).getTime() - new Date(cb.birthDate).getTime();
       });
 
+    const hasBlankVotes = (latestApproved.blankVotes || 0) > 0;
+    const totalItems = sortedEntries.length + (hasBlankVotes ? 1 : 0);
+    
+    // Se tiver mais de 6 itens, divide a tela em 2 colunas para caber tudo enorme sem rolar
+    const useTwoColumns = totalItems > 6;
+
     return (
-      <div className="min-h-screen bg-primary relative flex flex-col p-8">
+      <div className="min-h-screen bg-primary relative flex flex-col p-6 md:p-8 overflow-hidden">
         <BackButton />
-        <div className="text-center mb-8">
-          <img src={logoIpnb} alt="IPNB" className="w-16 h-16 mx-auto mb-4 rounded-full object-contain" />
-          <h1 className="text-4xl font-display font-bold text-primary-foreground mb-2">
-            Resultado — {latestApproved.type === 'presbitero' ? 'Presbíteros' : 'Diáconos'}
-          </h1>
-          <p className="text-xl text-primary-foreground/50">
+        
+        {/* Cabeçalho do Resultado */}
+        <div className="text-center mb-6 shrink-0 mt-4">
+          <div className="flex items-center justify-center gap-6 mb-2">
+            <Trophy className="w-16 h-16 text-gold" />
+            <h1 className="text-5xl md:text-7xl font-display font-bold text-primary-foreground">
+              Resultado — {latestApproved.type === 'presbitero' ? 'Presbíteros' : 'Diáconos'}
+            </h1>
+          </div>
+          <p className="text-3xl text-primary-foreground/50 font-bold">
             {latestApproved.round}º Escrutínio — {latestApproved.totalVotes} votos computados
           </p>
         </div>
 
-        <div className="flex-1 flex items-start justify-center overflow-auto">
-          <div className="w-full max-w-3xl space-y-3 pb-8">
+        {/* Grade Inteligente de Candidatos */}
+        <div className="flex-1 flex items-center justify-center w-full">
+          <div className={`w-full max-w-[95%] grid gap-4 md:gap-5 ${useTwoColumns ? 'lg:grid-cols-2' : 'max-w-4xl grid-cols-1'}`}>
+            
             {sortedEntries.map(([candidateId, votes], index) => {
               const candidate = state.candidates.find(c => c.id === candidateId);
               const isElected = latestApproved.electedIds.includes(candidateId);
@@ -177,69 +183,77 @@ export default function DataShow() {
                 <div
                   key={candidateId}
                   className={`
-                    flex items-center gap-4 p-4 rounded-xl transition-all
-                    ${isElected ? 'bg-gold/15 border border-gold/30' : 'bg-primary-foreground/5'}
+                    flex items-center gap-4 py-3 px-5 rounded-2xl transition-all
+                    ${isElected ? 'bg-gold/15 border-2 border-gold/40 shadow-[0_0_20px_rgba(255,215,0,0.1)]' : 'bg-primary-foreground/5 border-2 border-transparent'}
                   `}
                 >
-                  <span className={`text-2xl font-bold w-8 text-center ${isElected ? 'text-gold' : 'text-primary-foreground/30'}`}>
-                    {index + 1}
+                  <span className={`text-3xl md:text-4xl font-bold w-12 text-center ${isElected ? 'text-gold' : 'text-primary-foreground/30'}`}>
+                    {index + 1}º
                   </span>
-                  <div className="w-14 h-14 rounded-full bg-primary-foreground/10 overflow-hidden shrink-0">
+                  
+                  <div className="w-16 h-16 md:w-20 md:h-20 rounded-full bg-primary-foreground/10 overflow-hidden shrink-0 border-2 border-primary-foreground/10">
                     {candidate?.photo ? (
                       <img src={candidate.photo} alt="" className="w-full h-full object-cover" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center">
-                        <Users className="w-6 h-6 text-primary-foreground/20" />
+                        <Users className="w-8 h-8 text-primary-foreground/20" />
                       </div>
                     )}
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className={`font-display font-bold text-lg ${isElected ? 'text-gold' : 'text-primary-foreground'}`}>
+                  
+                  <div className="flex-1 min-w-0 pr-4">
+                    <div className="flex items-center gap-4 mb-2">
+                      <span className={`font-display font-bold text-3xl md:text-4xl truncate ${isElected ? 'text-gold' : 'text-primary-foreground'}`}>
                         {candidate?.name || 'Desconhecido'}
                       </span>
                       {isElected && (
-                        <span className="bg-gold text-accent-foreground text-xs font-bold px-2 py-0.5 rounded-full">
+                        <span className="bg-gold text-accent-foreground text-lg font-bold px-3 py-1 rounded-full shrink-0">
                           ELEITO
                         </span>
                       )}
                     </div>
-                    <div className="w-full bg-primary-foreground/5 rounded-full h-2.5">
+                    <div className="w-full bg-primary-foreground/10 rounded-full h-3">
                       <div
-                        className={`h-full rounded-full transition-all duration-1000 ${isElected ? 'bg-gold' : 'bg-primary-foreground/20'}`}
+                        className={`h-full rounded-full transition-all duration-1000 ${isElected ? 'bg-gold' : 'bg-primary-foreground/30'}`}
                         style={{ width: `${barWidth}%` }}
                       />
                     </div>
                   </div>
-                  <span className={`text-3xl font-mono font-bold ${isElected ? 'text-gold' : 'text-primary-foreground/50'}`}>
+                  
+                  <span className={`text-5xl md:text-6xl font-mono font-bold tracking-tighter ${isElected ? 'text-gold' : 'text-primary-foreground/60'}`}>
                     {votes}
                   </span>
                 </div>
               );
             })}
 
-            {/* Exibe Votos em Branco de forma destacada se houverem */}
-            {(latestApproved.blankVotes || 0) > 0 && (
-              <div className="flex items-center gap-4 p-4 rounded-xl transition-all bg-secondary/10 border border-secondary/20 mt-6">
-                <span className="text-2xl font-bold w-8 text-center text-primary-foreground/30">-</span>
-                <div className="w-14 h-14 rounded-full bg-secondary/20 flex items-center justify-center shrink-0">
-                  <Vote className="w-6 h-6 text-primary-foreground/40" />
+            {/* Cartão de Votos em Branco */}
+            {hasBlankVotes && (
+              <div className="flex items-center gap-4 py-3 px-5 rounded-2xl transition-all bg-secondary/20 border-2 border-secondary/30">
+                <span className="text-3xl md:text-4xl font-bold w-12 text-center text-primary-foreground/30">-</span>
+                
+                <div className="w-16 h-16 md:w-20 md:h-20 rounded-full bg-secondary/30 flex items-center justify-center shrink-0 border-2 border-secondary/40">
+                  <Vote className="w-8 h-8 text-primary-foreground/50" />
                 </div>
-                <div className="flex-1 min-w-0">
-                  <span className="font-display font-bold text-lg text-primary-foreground/60">
+                
+                <div className="flex-1 min-w-0 pr-4">
+                  <span className="font-display font-bold text-3xl md:text-4xl text-primary-foreground/70 uppercase tracking-wide">
                     Votos em Branco
                   </span>
                 </div>
-                <span className="text-3xl font-mono font-bold text-primary-foreground/50">
+                
+                <span className="text-5xl md:text-6xl font-mono font-bold tracking-tighter text-primary-foreground/50">
                   {latestApproved.blankVotes}
                 </span>
               </div>
             )}
+            
           </div>
         </div>
 
-        <p className="text-center text-primary-foreground/20 text-sm mt-4">
-          Em caso de empate, prevalece o candidato mais velho conforme praxe presbiteriana
+        {/* Rodapé fixo */}
+        <p className="text-center text-primary-foreground/30 text-xl font-bold mt-6 shrink-0">
+          Em caso de empate, prevalece o candidato mais velho conforme Manual Presbiteriano
         </p>
       </div>
     );
