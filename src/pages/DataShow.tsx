@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { useElection } from '@/contexts/ElectionContext';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Vote, Users, Clock, Trophy, ArrowLeft } from 'lucide-react';
+import { Vote, Users, Clock, ArrowLeft } from 'lucide-react';
+import logoIpnb from '@/assets/logo_ipnb.png';
 
 export default function DataShow() {
   const { state } = useElection();
@@ -159,7 +160,7 @@ export default function DataShow() {
         {/* Cabeçalho do Resultado */}
         <div className="text-center mb-6 shrink-0 mt-4">
           <div className="flex items-center justify-center gap-6 mb-2">
-            <Trophy className="w-16 h-16 text-gold" />
+            <img src={logoIpnb} alt="Logo IPNB" className="w-16 h-16 object-contain rounded-full" />
             <h1 className="text-5xl md:text-7xl font-display font-bold text-primary-foreground">
               Resultado — {latestApproved.type === 'presbitero' ? 'Presbíteros' : 'Diáconos'}
             </h1>
