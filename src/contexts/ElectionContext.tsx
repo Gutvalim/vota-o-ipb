@@ -34,8 +34,8 @@ export interface Scrutiny {
   round: number;
   status: ScrutinyStatus;
   votes: Record<string, number>;
-  totalVotes: number; // Quantidade de eleitores que votaram
-  blankVotes: number; // Soma de todos os votos não preenchidos (em branco)
+  totalVotes: number;
+  blankVotes: number;
   startedAt?: number;
   participatingCandidateIds: string[];
   resultsApproved: boolean;
@@ -202,13 +202,10 @@ function reducer(state: ElectionState, action: Action): ElectionState {
         
         const newTotal = s.totalVotes + 1;
         
-        // NOVA LÓGICA DE CÁLCULO DE VOTOS EM BRANCO
-        // Descobre quantas vagas esse eleitor tinha direito de preencher
         const alreadyElected = s.type === 'presbitero' ? state.electedPresbyters : state.electedDeacons;
         const totalSlots = s.type === 'presbitero' ? state.presbyterSlots : state.deaconSlots;
         const effectiveMax = totalSlots - alreadyElected.length;
         
-        // A diferença entre as vagas disponíveis e os candidatos que ele escolheu é o voto em branco
         const blankVotesToAdd = Math.max(0, effectiveMax - action.payload.candidateIds.length);
         const newBlankVotes = (s.blankVotes || 0) + blankVotesToAdd;
         
@@ -290,7 +287,7 @@ function reducer(state: ElectionState, action: Action): ElectionState {
 
 const ElectionContext = createContext<{
   state: ElectionState;
-  dispatch: React.Dispatch<Action>;
+  dispatch: (action: Action) => Promise<void>;
   resolveScrutinyResults: (scrutiny: Scrutiny, slots: number, alreadyElected?: string[]) => { elected: string[]; tied: boolean };
 } | null>(null);
 
@@ -314,18 +311,34 @@ export function ElectionProvider({ children }: { children: ReactNode }) {
 
   const dispatch = async (action: Action) => {
     const docRef = doc(db, 'elections', ELECTION_DOC_ID);
+    
+    // SISTEMA DE TRANSAÇÃO (Bloqueia sobreposição e rejeita votos após encerramento)
     if (action.type === 'CAST_VOTE') {
       try {
         await runTransaction(db, async (transaction) => {
           const sfDoc = await transaction.get(docRef);
-          if (!sfDoc.exists()) return;
+          if (!sfDoc.exists()) throw new Error("Documento não existe");
+          
           const remoteState = sfDoc.data() as ElectionState;
+          
+          // TRAVA DE SEGURANÇA: Verifica o status da urna NO SERVIDOR antes de contar
+          const currentScrutiny = remoteState.scrutinies.find(s => s.id === action.payload.scrutinyId);
+          if (!currentScrutiny || currentScrutiny.status !== 'open') {
+            throw new Error("Voto rejeitado: A votação já foi encerrada.");
+          }
+
+          // Se a urna estiver aberta, aplica o voto com segurança
           const nextState = reducer(remoteState, action);
           transaction.set(docRef, nextState);
         });
-      } catch (error) { console.error("Erro ao registrar voto:", error); }
+      } catch (error) { 
+        console.error("Erro na transação de voto:", error); 
+        throw error; // Repassa o erro para a interface lidar (Urna.tsx)
+      }
       return;
     }
+    
+    // Outras ações normais (não precisam de transação atômica)
     const nextState = reducer(stateRef.current, action);
     try { await setDoc(docRef, nextState); } catch (error) { console.error("Erro na sincronização:", error); }
   };
