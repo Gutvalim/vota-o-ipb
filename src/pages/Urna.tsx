@@ -265,7 +265,7 @@ export default function Urna() {
               {showConfirm ? (
                 'CONFIRMAR'
               ) : selectedIds.length === 0 ? (
-                `VOTAR EM BRANCO`
+                `VOTAR`
               ) : (
                 <><Vote className="w-6 h-6 md:w-8 md:h-8 mr-2" /> VOTAR ({selectedIds.length})</>
               )}
