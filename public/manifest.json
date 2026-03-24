@@ -2,7 +2,7 @@
   "name": "Sistema de Votação IPB",
   "short_name": "Urna IPB",
   "start_url": "/",
-  "display": "standalone",
+  "display": "fullscreen",
   "background_color": "#0F172A",
   "theme_color": "#0F172A",
   "orientation": "any",
