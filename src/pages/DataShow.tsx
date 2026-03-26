@@ -129,7 +129,10 @@ export default function DataShow() {
         <h1 className="text-7xl font-display font-bold text-primary-foreground mb-6 text-center">
           Votação Encerrada
         </h1>
-        <p className="text-4xl text-primary-foreground/50 mt-4 text-center">
+        <p className="text-4xl text-gold font-display font-bold mt-4 text-center">
+          {pendingApproval.type === 'presbitero' ? 'Eleição de Presbíteros' : 'Eleição de Diáconos'} — {pendingApproval.round}º Escrutínio
+        </p>
+        <p className="text-3xl text-primary-foreground/50 mt-4 text-center">
           Aguardando apuração do resultado...
         </p>
       </div>
