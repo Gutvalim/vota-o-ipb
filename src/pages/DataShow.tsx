@@ -129,7 +129,10 @@ export default function DataShow() {
         <h1 className="text-7xl font-display font-bold text-primary-foreground mb-6 text-center">
           Votação Encerrada
         </h1>
-        <p className="text-4xl text-primary-foreground/50 mt-4 text-center">
+        <p className="text-4xl text-gold font-display font-bold mt-4 text-center">
+          {pendingApproval.type === 'presbitero' ? 'Eleição de Presbíteros' : 'Eleição de Diáconos'} — {pendingApproval.round}º Escrutínio
+        </p>
+        <p className="text-3xl text-primary-foreground/50 mt-4 text-center">
           Aguardando apuração do resultado...
         </p>
       </div>
@@ -159,12 +162,12 @@ export default function DataShow() {
         
         <div className="text-center mb-6 shrink-0 mt-4">
           <div className="flex items-center justify-center gap-6 mb-2">
-            <img src={logoIpnb} alt="Logo IPNB" className="w-60 h-60 object-contain rounded-full" />
-            <h1 className="text-5xl md:text-7xl font-display font-bold text-primary-foreground">
+            <img src={logoIpnb} alt="Logo IPNB" className="w-[2.625rem] h-[2.625rem] md:w-[10.5rem] md:h-[10.5rem] object-contain rounded-full" />
+            <h1 className="text-4xl md:text-5xl font-display font-bold text-primary-foreground">
               Resultado — {latestApproved.type === 'presbitero' ? 'Presbíteros' : 'Diáconos'}
             </h1>
           </div>
-          <p className="text-3xl text-primary-foreground/50 font-bold">
+          <p className="text-2xl text-primary-foreground/50 font-bold">
             {latestApproved.round}º Escrutínio — {latestApproved.totalVotes} votos computados
           </p>
         </div>
