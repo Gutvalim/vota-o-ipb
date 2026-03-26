@@ -164,7 +164,7 @@ export default function DataShow() {
               Resultado — {latestApproved.type === 'presbitero' ? 'Presbíteros' : 'Diáconos'}
             </h1>
           </div>
-          <p className="text-3xl text-primary-foreground/50 font-bold">
+          <p className="text-2xl text-primary-foreground/50 font-bold">
             {latestApproved.round}º Escrutínio — {latestApproved.totalVotes} votos computados
           </p>
         </div>
