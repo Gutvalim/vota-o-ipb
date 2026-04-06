@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useElection } from '@/contexts/ElectionContext';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -49,6 +49,14 @@ export default function Urna() {
   
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [voteError, setVoteError] = useState(false);
+
+  // NOVO: Efeito de Amnésia. Sempre que o escrutínio mudar, limpa a urna imediatamente.
+  useEffect(() => {
+    setSelectedIds([]);
+    setShowConfirm(false);
+    setVoteError(false);
+    setHasVoted(false);
+  }, [state.currentScrutinyId]);
 
   const currentScrutiny = state.scrutinies.find(s => s.id === state.currentScrutinyId);
   const isOpen = currentScrutiny?.status === 'open';
@@ -109,6 +117,7 @@ export default function Urna() {
     setVoteError(false); 
   };
 
+  // TELA DE ESPERA
   if (!isOpen || votingClosed) {
     return (
       <div className="h-screen flex flex-col items-center justify-center bg-primary p-8 overflow-hidden relative">
@@ -119,31 +128,39 @@ export default function Urna() {
         <h1 className="text-4xl md:text-5xl font-display font-bold text-primary-foreground mb-4 text-center">
           {state.title || 'Sistema de Votação'}
         </h1>
-        <p className="text-primary-foreground/60 text-2xl mb-8 text-center">
+        <p className="text-primary-foreground/60 text-2xl mb-8 text-center px-4">
           {votingClosed ? 'A votação foi encerrada. Aguarde o resultado.' : 'Nenhuma votação em andamento no momento.'}
         </p>
       </div>
     );
   }
 
-  // NOVA TELA: Bloqueio Total em caso de Erro
+  // TELA DE ERRO (Centralizada e Segura)
   if (voteError) {
     return (
-      <div className="h-screen flex flex-col items-center justify-center bg-primary p-8 overflow-hidden">
-        <div className="text-center max-w-3xl mx-auto bg-destructive/10 p-8 md:p-12 rounded-3xl border-2 border-destructive/30 shadow-2xl">
-          <XCircle className="w-32 h-32 md:w-40 md:h-40 text-destructive mx-auto mb-8 animate-pulse" />
-          <h1 className="text-4xl md:text-6xl font-display font-bold text-destructive mb-6 leading-tight">
-            Voto NÃO Computado!
+      <div className="h-screen flex flex-col items-center justify-center bg-primary p-4 overflow-hidden">
+        <div className="w-full max-w-md md:max-w-2xl mx-auto bg-destructive/10 p-6 md:p-10 rounded-3xl border-2 border-destructive/30 shadow-2xl flex flex-col items-center text-center">
+          <XCircle className="w-24 h-24 md:w-32 md:h-32 text-destructive mb-6 animate-pulse shrink-0" />
+          <h1 className="text-3xl md:text-5xl font-display font-bold text-destructive mb-4 leading-tight">
+            Voto NÃO<br/>Computado!
           </h1>
-          <p className="text-primary-foreground/90 text-2xl md:text-3xl mb-4 font-bold">
+          <p className="text-primary-foreground/90 text-lg md:text-2xl mb-6 font-bold px-2">
             Houve uma falha na conexão com o servidor.
           </p>
-          <p className="text-primary-foreground/70 text-xl md:text-2xl mb-12 bg-primary/50 p-4 rounded-xl border border-primary-foreground/10">
-            Por favor, não saia da cabine e <strong className="text-white text-2xl uppercase block mt-2">chame um mesário agora.</strong>
-          </p>
+          <div className="w-full bg-primary/50 p-4 md:p-6 rounded-xl border border-primary-foreground/10 mb-8">
+            <p className="text-primary-foreground/70 text-base md:text-xl">
+              Por favor, não saia da cabine e
+            </p>
+            <strong className="text-white text-lg md:text-2xl uppercase block mt-2">
+              chame um mesário agora.
+            </strong>
+          </div>
           <Button 
-            onClick={() => setVoteError(false)} 
-            className="bg-destructive text-destructive-foreground hover:bg-destructive/90 text-xl md:text-2xl px-8 py-8 w-full shadow-xl font-bold tracking-wide"
+            onClick={() => {
+              setVoteError(false);
+              setSelectedIds([]); // NOVO: Garante que os votos somem por privacidade
+            }} 
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90 text-sm md:text-xl px-4 py-6 w-full shadow-xl font-bold tracking-wide h-auto whitespace-normal"
           >
             ENTENDI, VOLTAR PARA A URNA
           </Button>
@@ -155,16 +172,16 @@ export default function Urna() {
   // TELA DE SUCESSO
   if (hasVoted) {
     return (
-      <div className="h-screen flex flex-col items-center justify-center bg-primary p-8 overflow-hidden">
-        <div className="text-center">
-          <CheckCircle2 className="w-32 h-32 text-success mx-auto mb-8" />
-          <h1 className="text-5xl md:text-6xl font-display font-bold text-primary-foreground mb-6">
+      <div className="h-screen flex flex-col items-center justify-center bg-primary p-4 overflow-hidden">
+        <div className="text-center w-full max-w-md md:max-w-2xl px-4">
+          <CheckCircle2 className="w-24 h-24 md:w-32 md:h-32 text-success mx-auto mb-6 shrink-0" />
+          <h1 className="text-4xl md:text-6xl font-display font-bold text-primary-foreground mb-4 leading-tight">
             Voto Confirmado!
           </h1>
-          <p className="text-primary-foreground/60 text-2xl mb-12">
+          <p className="text-primary-foreground/60 text-lg md:text-2xl mb-10">
             Seu voto foi registrado com segurança no servidor.
           </p>
-          <Button onClick={handleNewVote} className="bg-gold text-accent-foreground hover:bg-gold-light text-2xl px-12 py-8 font-bold">
+          <Button onClick={handleNewVote} className="bg-gold text-accent-foreground hover:bg-gold-light text-lg md:text-2xl px-8 py-6 h-auto w-full md:w-auto font-bold whitespace-normal">
             Liberar para o Próximo Eleitor
           </Button>
         </div>
@@ -172,19 +189,19 @@ export default function Urna() {
     );
   }
 
-  // NOVA TELA: Status de Envio (Carregando)
+  // TELA DE CARREGAMENTO (Centralizada)
   if (isSubmitting) {
     return (
-      <div className="h-screen flex flex-col items-center justify-center bg-primary p-8 overflow-hidden">
-        <div className="text-center max-w-3xl mx-auto bg-primary-foreground/5 p-8 md:p-12 rounded-3xl border-2 border-primary-foreground/10 shadow-2xl">
-          <Loader2 className="w-32 h-32 md:w-40 md:h-40 text-gold mx-auto mb-8 animate-spin" />
-          <h1 className="text-4xl md:text-6xl font-display font-bold text-primary-foreground mb-6 leading-tight">
+      <div className="h-screen flex flex-col items-center justify-center bg-primary p-4 overflow-hidden">
+        <div className="w-full max-w-md md:max-w-2xl mx-auto bg-primary-foreground/5 p-6 md:p-10 rounded-3xl border-2 border-primary-foreground/10 shadow-2xl flex flex-col items-center text-center">
+          <Loader2 className="w-24 h-24 md:w-32 md:h-32 text-gold mb-6 animate-spin shrink-0" />
+          <h1 className="text-3xl md:text-5xl font-display font-bold text-primary-foreground mb-4 leading-tight">
             Aguarde...
           </h1>
-          <p className="text-primary-foreground/90 text-2xl md:text-3xl mb-4 font-bold">
+          <p className="text-primary-foreground/90 text-lg md:text-2xl mb-4 font-bold px-2">
             Enviando seu voto para o servidor.
           </p>
-          <p className="text-primary-foreground/70 text-xl md:text-2xl mt-4">
+          <p className="text-primary-foreground/70 text-base md:text-xl mt-2 px-2">
             Não feche o aplicativo e não desligue a tela.
           </p>
         </div>
