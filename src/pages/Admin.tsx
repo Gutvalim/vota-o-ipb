@@ -62,6 +62,15 @@ export default function Admin() {
   const [authMode, setAuthMode] = useState<'pin' | 'code'>('pin');
   const [customPin, setCustomPin] = useState('4321');
 
+  // CORREÇÃO PARA O CELULAR: Limpa a fila de impressão apenas quando o sistema operacional avisa que já imprimiu
+  useEffect(() => {
+    const handleAfterPrint = () => {
+      setPrintingVoters([]);
+    };
+    window.addEventListener('afterprint', handleAfterPrint);
+    return () => window.removeEventListener('afterprint', handleAfterPrint);
+  }, []);
+
   if (!currentUser) {
     navigate('/login');
     return null;
@@ -298,10 +307,11 @@ export default function Admin() {
   const handlePrint = (votersToPrint: Voter[]) => {
     if (votersToPrint.length === 0) return;
     setPrintingVoters(votersToPrint);
+    
+    // CORREÇÃO PARA O CELULAR: Tempo maior para processar e não apagamos a lista aqui
     setTimeout(() => {
       window.print();
-      setPrintingVoters([]);
-    }, 300);
+    }, 800);
   };
 
   const sortedVoters = [...voters].sort((a, b) => b.createdAt - a.createdAt);
@@ -731,7 +741,6 @@ export default function Admin() {
             <div 
               key={v.code} 
               className="flex flex-col items-center justify-center p-2 text-center w-full"
-              // CORREÇÃO APLICADA AQUI: Não quebra a página após o último código impresso
               style={{ pageBreakAfter: index === printingVoters.length - 1 ? 'auto' : 'always', margin: '0 auto' }}
             >
               <h2 className="font-bold text-lg leading-tight uppercase">IPB Nova Brasília</h2>
