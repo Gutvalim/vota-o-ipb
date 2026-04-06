@@ -23,7 +23,6 @@ const ROLE_LABELS: Record<CandidateRole, string> = {
   membro: 'Membro',
 };
 
-// NOVO: Caixa de texto inteligente para evitar o "bug de digitação" do Firebase
 function SyncInput({ value, onChange, ...props }: any) {
   const [localValue, setLocalValue] = useState(value);
   const [isFocused, setIsFocused] = useState(false);
@@ -288,6 +287,15 @@ export default function Admin() {
     }
   };
 
+  // NOVO: Função para excluir um único eleitor
+  const handleDeleteSingleVoter = (codeToRemove: string) => {
+    if (confirm(`Tem certeza que deseja excluir o código ${codeToRemove}?`)) {
+      const updatedVoters = voters.filter(v => v.code !== codeToRemove);
+      dispatch({ type: 'SET_ELECTION', payload: { voters: updatedVoters } });
+      toast.success(`Código ${codeToRemove} excluído.`);
+    }
+  };
+
   const handlePrint = (votersToPrint: Voter[]) => {
     if (votersToPrint.length === 0) return;
     setPrintingVoters(votersToPrint);
@@ -297,7 +305,6 @@ export default function Admin() {
     }, 300);
   };
 
-  // NOVO: Ordena a lista de eleitores para o último gerado aparecer em cima
   const sortedVoters = [...voters].sort((a, b) => b.createdAt - a.createdAt);
 
   return (
@@ -373,7 +380,6 @@ export default function Admin() {
             </Card>
           )}
 
-          {/* ATUALIZADO: Uso do SyncInput para evitar embaralhamento de letras */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-lg">
@@ -444,18 +450,26 @@ export default function Admin() {
                   </Button>
                 </div>
               </div>
-              {/* ATUALIZADO: Usando a lista ordenada para o último gerado ficar no topo */}
+              
               {sortedVoters.length > 0 && (
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 max-h-[300px] overflow-y-auto p-2 border rounded-lg bg-card">
                   {sortedVoters.map(v => (
                     <div key={v.code} className="flex items-center justify-between bg-muted rounded-md p-2 border">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1">
                         <Ticket className="w-4 h-4 text-muted-foreground" />
-                        <span className="font-mono font-bold text-lg tracking-widest">{v.code}</span>
+                        <span className="font-mono font-bold text-base md:text-lg tracking-widest">{v.code}</span>
                       </div>
-                      <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-blue-600" onClick={() => handlePrint([v])} title="Imprimir este">
-                        <Printer className="w-3 h-3" />
-                      </Button>
+                      
+                      {/* ATUALIZADO: Dois botões (Imprimir e Excluir) */}
+                      <div className="flex items-center gap-1">
+                        <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-blue-600" onClick={() => handlePrint([v])} title="Imprimir este">
+                          <Printer className="w-3 h-3" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive" onClick={() => handleDeleteSingleVoter(v.code)} title="Excluir este">
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
+                      </div>
+
                     </div>
                   ))}
                 </div>
@@ -734,10 +748,10 @@ export default function Admin() {
               </div>
               
               <p className="text-[10px] mt-4 font-bold uppercase leading-tight">
-                Aceda à aplicação da urna e aproxime<br/>este QR Code da câmara.
+                Acesse o aplicativo da urna e aproxime<br/>este QR Code da câmera.
               </p>
               <p className="text-[9px] mt-1 text-black/60">
-                Uso único e intransmissível.
+                Uso único e intransferível.
               </p>
             </div>
           ))}
