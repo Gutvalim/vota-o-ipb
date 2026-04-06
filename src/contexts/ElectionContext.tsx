@@ -318,7 +318,7 @@ function reducer(state: ElectionState, action: Action): ElectionState {
         ? { ...state, electedPresbyters: action.payload.candidateIds }
         : { ...state, electedDeacons: action.payload.candidateIds };
     case 'CLEAR_CANDIDATES': return { ...state, candidates: [] };
-    case 'RESET': return { ...initialState, candidates: state.candidates };
+    case 'RESET': return { ...initialState, candidates: state.candidates, voters: state.voters };
     default: return state;
   }
 }
