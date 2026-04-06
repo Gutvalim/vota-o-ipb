@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { QRCodeSVG } from 'qrcode.react';
 import {
-  ArrowLeft, Plus, Trash2, Play, Square, AlertTriangle, Users, Award, RotateCcw, UserPlus, LogOut, CheckCircle2, XCircle, ShieldCheck, Eye, QrCode, Printer, Ticket, Smartphone, Tablet
+  ArrowLeft, Plus, Trash2, Play, Square, AlertTriangle, Users, Award, RotateCcw, UserPlus, LogOut, CheckCircle2, XCircle, ShieldCheck, Eye, QrCode, Printer, Smartphone, Tablet, Search
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -58,11 +58,13 @@ export default function Admin() {
 
   const [voterCountToGenerate, setVoterCountToGenerate] = useState<number | string>(1);
   const [printingVoters, setPrintingVoters] = useState<Voter[]>([]);
+  
+  // NOVO: Estado para a barra de pesquisa de eleitores
+  const [searchVoter, setSearchVoter] = useState('');
 
   const [authMode, setAuthMode] = useState<'pin' | 'code'>('pin');
   const [customPin, setCustomPin] = useState('4321');
 
-  // CORREÇÃO PARA O CELULAR: Limpa a fila de impressão apenas quando o sistema operacional avisa que já imprimiu
   useEffect(() => {
     const handleAfterPrint = () => {
       setPrintingVoters([]);
@@ -308,13 +310,14 @@ export default function Admin() {
     if (votersToPrint.length === 0) return;
     setPrintingVoters(votersToPrint);
     
-    // CORREÇÃO PARA O CELULAR: Tempo maior para processar e não apagamos a lista aqui
     setTimeout(() => {
       window.print();
     }, 800);
   };
 
+  // Ordena a lista geral (mais novos primeiro) e depois aplica o filtro da barra de pesquisa
   const sortedVoters = [...voters].sort((a, b) => b.createdAt - a.createdAt);
+  const filteredVoters = sortedVoters.filter(v => v.code.includes(searchVoter));
 
   return (
     <>
@@ -460,27 +463,45 @@ export default function Admin() {
                 </div>
               </div>
               
-              {sortedVoters.length > 0 && (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 max-h-[300px] overflow-y-auto p-2 border rounded-lg bg-card">
-                  {sortedVoters.map(v => (
-                    <div key={v.code} className="flex items-center justify-between bg-muted rounded-md p-2 border">
-                      <div className="flex items-center gap-1">
-                        <Ticket className="w-4 h-4 text-muted-foreground" />
-                        <span className="font-mono font-bold text-base md:text-lg tracking-widest">{v.code}</span>
-                      </div>
+              {/* NOVO: Barra de pesquisa de códigos */}
+              {voters.length > 0 && (
+                <div className="relative max-w-sm">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input 
+                    placeholder="Pesquisar código (ex: 123456)..." 
+                    value={searchVoter}
+                    onChange={(e) => setSearchVoter(e.target.value.replace(/[^0-9]/g, ''))}
+                    maxLength={6}
+                    className="pl-9 bg-background"
+                  />
+                </div>
+              )}
+
+              {filteredVoters.length > 0 ? (
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 md:gap-3 max-h-[300px] overflow-y-auto p-2 border rounded-lg bg-card">
+                  {filteredVoters.map(v => (
+                    <div key={v.code} className="flex items-center justify-between bg-muted rounded-md p-1.5 md:p-2 border">
+                      {/* ATUALIZADO: Ícone de ticket removido e espaçamento/texto otimizados para o mobile */}
+                      <span className="font-mono font-bold text-base md:text-lg tracking-wider md:tracking-widest pl-1">{v.code}</span>
                       
-                      <div className="flex items-center gap-1">
-                        <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-blue-600" onClick={() => handlePrint([v])} title="Imprimir este">
-                          <Printer className="w-3 h-3" />
+                      <div className="flex items-center">
+                        <Button variant="ghost" size="icon" className="h-6 w-6 md:h-7 md:w-7 text-muted-foreground hover:text-blue-600" onClick={() => handlePrint([v])} title="Imprimir este">
+                          <Printer className="w-3.5 h-3.5" />
                         </Button>
-                        <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive" onClick={() => handleDeleteSingleVoter(v.code)} title="Excluir este">
-                          <Trash2 className="w-3 h-3" />
+                        <Button variant="ghost" size="icon" className="h-6 w-6 md:h-7 md:w-7 text-muted-foreground hover:text-destructive" onClick={() => handleDeleteSingleVoter(v.code)} title="Excluir este">
+                          <Trash2 className="w-3.5 h-3.5" />
                         </Button>
                       </div>
 
                     </div>
                   ))}
                 </div>
+              ) : (
+                voters.length > 0 && (
+                  <p className="text-center text-muted-foreground py-4 border rounded-lg bg-muted/20">
+                    Nenhum código encontrado com "{searchVoter}".
+                  </p>
+                )
               )}
             </CardContent>
           </Card>
