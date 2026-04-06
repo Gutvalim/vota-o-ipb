@@ -46,7 +46,7 @@ function SyncInput({ value, onChange, ...props }: any) {
 }
 
 export default function Admin() {
-  const { state, dispatch } = useElection();
+  const { state, dispatch, resolveScrutinyResults } = useElection();
   const { currentUser, users, logout, approveUser, rejectUser } = useAuth();
   const navigate = useNavigate();
 
@@ -88,6 +88,7 @@ export default function Admin() {
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
     const reader = new FileReader();
     reader.onload = (ev) => {
       const img = new Image();
@@ -122,9 +123,11 @@ export default function Admin() {
     if (editingCandidate) {
       dispatch({ type: 'UPDATE_CANDIDATE', payload: { ...editingCandidate, ...form } });
       setEditingCandidate(null);
+      toast.success('Candidato atualizado');
     } else {
       const candidate: Candidate = { id: crypto.randomUUID(), ...form };
       dispatch({ type: 'ADD_CANDIDATE', payload: candidate });
+      toast.success('Candidato adicionado');
     }
     setForm({ name: '', photo: '', birthDate: '', currentRole: 'membro' });
     setShowCandidateForm(false);
@@ -133,14 +136,60 @@ export default function Admin() {
   const handleInitiateStartScrutiny = (type: ScrutinyType) => {
     const alreadyElected = type === 'presbitero' ? state.electedPresbyters : state.electedDeacons;
     const previousScrutinies = state.scrutinies.filter(s => s.type === type && s.status === 'closed');
+    const lastScrutiny = previousScrutinies[previousScrutinies.length - 1];
     const slots = type === 'presbitero' ? state.presbyterSlots : state.deaconSlots;
+    const remainingSlots = slots - alreadyElected.length;
+    const nextRound = previousScrutinies.length + 1;
+
     let eligibleCandidates = state.candidates.filter(c => !alreadyElected.includes(c.id));
-    setSelectedParticipants(eligibleCandidates.map(c => c.id));
+    let initialSelected: string[] = [];
+
+    if (nextRound === 1) {
+      if (eligibleCandidates.length < (slots * 2)) {
+        initialSelected = eligibleCandidates.map(c => c.id);
+      } else {
+        initialSelected = [];
+      }
+    } else {
+      if (lastScrutiny) {
+        eligibleCandidates = eligibleCandidates.filter(c => lastScrutiny.participatingCandidateIds.includes(c.id));
+      }
+      if (nextRound >= 3 && lastScrutiny) {
+        const sortedFromLast = Object.entries(lastScrutiny.votes)
+          .filter(([id]) => lastScrutiny.participatingCandidateIds.includes(id) && !alreadyElected.includes(id))
+          .sort((a, b) => {
+            if (b[1] !== a[1]) return b[1] - a[1];
+            const ca = state.candidates.find(c => c.id === a[0]);
+            const cb = state.candidates.find(c => c.id === b[0]);
+            if (!ca || !cb) return 0;
+            return new Date(ca.birthDate).getTime() - new Date(cb.birthDate).getTime();
+          });
+        const funnelCount = remainingSlots * 2;
+        const funnelIds = sortedFromLast.slice(0, funnelCount).map(([id]) => id);
+        eligibleCandidates = eligibleCandidates.filter(c => funnelIds.includes(c.id));
+      }
+      initialSelected = eligibleCandidates.map(c => c.id);
+    }
+    setSelectedParticipants(initialSelected);
     setStartingScrutinyType(type);
+    setAuthMode('pin'); 
+    setCustomPin('4321');
   };
 
   const handleConfirmStartScrutiny = async () => {
     if (!startingScrutinyType) return;
+    if (selectedParticipants.length === 0) {
+      toast.error('Selecione pelo menos um candidato');
+      return;
+    }
+    if (authMode === 'pin' && (!customPin || customPin.length < 4)) {
+      toast.error('O PIN do mesário deve ter pelo menos 4 dígitos.');
+      return;
+    }
+    if (authMode === 'code' && voters.length === 0) {
+      toast.error('Não há eleitores cadastrados. Vá na aba Gerenciar Eleitores primeiro.');
+      return;
+    }
     const existingRounds = state.scrutinies.filter(s => s.type === startingScrutinyType).length;
     try {
       await dispatch({
@@ -153,28 +202,102 @@ export default function Admin() {
           pin: authMode === 'pin' ? customPin : ""
         },
       });
+      toast.success(`Votação iniciada no modo: ${authMode === 'pin' ? 'Tablet/Mesário' : 'Celular (QR Code)'}`);
       setStartingScrutinyType(null);
+      setSelectedParticipants([]);
     } catch (error: any) {
-      toast.error("Erro ao iniciar: " + error.message);
+      toast.error("Falha ao iniciar escrutínio no servidor: " + error.message);
     }
+  };
+
+  const handleCloseScrutiny = () => {
+    if (!state.currentScrutinyId) return;
+    dispatch({ type: 'CLOSE_SCRUTINY', payload: state.currentScrutinyId });
+    toast.success('Votação encerrada');
+  };
+
+  const handleRestartScrutiny = (scrutinyId: string) => {
+    if (confirm('Atenção: Isso vai APAGAR TODOS os votos computados neste escrutínio e reabrir a votação! Deseja continuar?')) {
+      dispatch({ type: 'RESTART_SCRUTINY', payload: scrutinyId });
+      toast.info('O escrutínio foi reiniciado e as urnas reabertas.');
+    }
+  };
+
+  const handleApproveResults = (scrutinyId: string) => {
+    dispatch({ type: 'APPROVE_RESULTS', payload: scrutinyId });
+    toast.success('Resultado liberado para o Data Show');
+  };
+
+  const handleReset = () => {
+    if (confirm('Tem certeza que deseja resetar toda a eleição? Os candidatos e códigos serão mantidos, mas os resultados zerados.')) {
+      dispatch({ type: 'RESET' });
+      toast.info('Eleição resetada.');
+    }
+  };
+
+  const handleClearCandidates = () => {
+    if (confirm('Tem certeza que deseja apagar TODOS os candidatos?')) {
+      dispatch({ type: 'CLEAR_CANDIDATES' } as any);
+      toast.info('Candidatos apagados.');
+    }
+  };
+
+  const handleLogout = () => {
+    logout();
+    navigate('/');
+  };
+
+  const getScrutinyInfo = (type: ScrutinyType) => {
+    const alreadyElected = type === 'presbitero' ? state.electedPresbyters : state.electedDeacons;
+    const slots = type === 'presbitero' ? state.presbyterSlots : state.deaconSlots;
+    const remainingSlots = slots - alreadyElected.length;
+    const previousRounds = state.scrutinies.filter(s => s.type === type && s.status === 'closed').length;
+    const nextRound = previousRounds + 1;
+    return { remainingSlots, nextRound, alreadyElected };
   };
 
   const handleGenerateVoters = () => {
     const count = parseInt(voterCountToGenerate.toString());
+    if (isNaN(count) || count <= 0 || count > 500) {
+      toast.error('Informe uma quantidade válida (Max: 500 por vez).');
+      return;
+    }
     const newVoters: Voter[] = [];
     for (let i = 0; i < count; i++) {
-      const code = Math.floor(100000 + Math.random() * 900000).toString();
+      let code;
+      let isDuplicate;
+      do {
+        code = Math.floor(100000 + Math.random() * 900000).toString();
+        isDuplicate = voters.some(v => v.code === code) || newVoters.some(v => v.code === code);
+      } while (isDuplicate);
       newVoters.push({ code, createdAt: Date.now() });
     }
     dispatch({ type: 'ADD_VOTERS', payload: newVoters });
+    toast.success(`${count} códigos gerados com sucesso!`);
     setVoterCountToGenerate(1);
   };
 
+  const handleClearVoters = () => {
+    if (confirm('ATENÇÃO: Isso apagará TODOS os códigos gerados. Eleitores não poderão votar se seus códigos forem apagados. Continuar?')) {
+      dispatch({ type: 'CLEAR_VOTERS' } as any);
+      toast.info('Todos os códigos de eleitores foram apagados.');
+    }
+  };
+
+  const handleDeleteSingleVoter = (codeToRemove: string) => {
+    if (confirm(`Tem certeza que deseja excluir o código ${codeToRemove}?`)) {
+      const updatedVoters = voters.filter(v => v.code !== codeToRemove);
+      dispatch({ type: 'SET_ELECTION', payload: { voters: updatedVoters } });
+      toast.success(`Código ${codeToRemove} excluído.`);
+    }
+  };
+
   const handlePrint = (votersToPrint: Voter[]) => {
+    if (votersToPrint.length === 0) return;
     setPrintingVoters(votersToPrint);
     setTimeout(() => {
       window.print();
-    }, 500);
+    }, 800);
   };
 
   const sortedVoters = [...voters].sort((a, b) => b.createdAt - a.createdAt);
@@ -183,163 +306,434 @@ export default function Admin() {
   return (
     <>
       <style>{`
-        @media screen {
-          .print-only { display: none; }
-        }
         @media print {
           @page { 
             margin: 0; 
-            size: 58mm auto;
+            size: auto;
           }
           html, body {
             height: auto !important;
             overflow: visible !important;
+            background: white !important;
+          }
+          .print-container {
+            display: block !important;
+            width: 58mm !important;
             margin: 0 !important;
             padding: 0 !important;
-            background: white !important;
           }
           .no-print {
             display: none !important;
           }
-          .print-only {
-            display: block !important;
-            width: 58mm !important;
-          }
-          .ticket {
-            width: 58mm !important;
-            padding: 5mm !important;
-            text-align: center;
-            page-break-after: always;
-            box-sizing: border-box;
-          }
-          .ticket:last-child {
-            page-break-after: auto;
-          }
         }
       `}</style>
 
-      <div className="min-h-screen bg-background no-print pb-20">
+      <div className="min-h-screen bg-background no-print">
         <header className="bg-primary text-primary-foreground p-4 shadow-lg">
           <div className="max-w-5xl mx-auto flex items-center gap-4">
-            <Button variant="ghost" size="icon" onClick={() => navigate('/')} className="text-primary-foreground">
+            <Button variant="ghost" size="icon" onClick={() => navigate('/')} className="text-primary-foreground hover:bg-primary-foreground/10">
               <ArrowLeft className="w-5 h-5" />
             </Button>
-            <h1 className="text-xl font-bold">Painel Administrativo</h1>
-            <Button variant="ghost" size="sm" onClick={() => logout()} className="ml-auto">Sair</Button>
+            <div>
+              <h1 className="text-xl font-display font-bold">Painel Administrativo</h1>
+              <p className="text-sm text-primary-foreground/60">Logado como: {currentUser.username}</p>
+            </div>
+            <div className="ml-auto flex gap-2">
+              <Button variant="ghost" size="sm" onClick={handleReset} className="text-primary-foreground/60 hover:text-primary-foreground hover:bg-primary-foreground/10">
+                <RotateCcw className="w-4 h-4 mr-1" /> Resetar Eleição
+              </Button>
+              <Button variant="ghost" size="sm" onClick={handleLogout} className="text-primary-foreground/60 hover:text-primary-foreground hover:bg-primary-foreground/10">
+                <LogOut className="w-4 h-4 mr-1" /> Sair
+              </Button>
+            </div>
           </div>
         </header>
 
-        <main className="max-w-5xl mx-auto p-4 space-y-6">
+        <main className="max-w-5xl mx-auto p-4 md:p-6 space-y-6">
+          {currentUser.isAdmin && pendingUsers.length > 0 && (
+            <Card className="border-gold bg-gold/5">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <ShieldCheck className="w-5 h-5 text-gold" />
+                  Usuários Aguardando Aprovação ({pendingUsers.length})
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  {pendingUsers.map(u => (
+                    <div key={u.username} className="flex items-center justify-between p-3 rounded-lg border bg-card">
+                      <span className="font-semibold">{u.username}</span>
+                      <div className="flex gap-2">
+                        <Button size="sm" onClick={() => { approveUser(u.username); toast.success(`${u.username} aprovado`); }} className="bg-success text-success-foreground hover:bg-success/90">
+                          <CheckCircle2 className="w-4 h-4 mr-1" /> Aprovar
+                        </Button>
+                        <Button size="sm" variant="destructive" onClick={() => { rejectUser(u.username); toast.info(`${u.username} rejeitado`); }}>
+                          <XCircle className="w-4 h-4 mr-1" /> Rejeitar
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {state.alerts.length > 0 && (
+            <Card className="border-gold bg-gold/5">
+              <CardContent className="pt-4">
+                {state.alerts.map((alert, i) => (
+                  <div key={i} className="flex items-start gap-2 text-sm mb-2">
+                    <AlertTriangle className="w-4 h-4 text-gold shrink-0 mt-0.5" />
+                    <span>{alert}</span>
+                  </div>
+                ))}
+                <Button variant="ghost" size="sm" onClick={() => dispatch({ type: 'CLEAR_ALERTS' })} className="mt-2 text-muted-foreground">Limpar alertas</Button>
+              </CardContent>
+            </Card>
+          )}
+
           <Card>
-            <CardHeader><CardTitle>Configuração</CardTitle></CardHeader>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <Award className="w-5 h-5 text-gold" /> Configuração da Eleição
+              </CardTitle>
+            </CardHeader>
             <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              <div><Label>Título</Label><SyncInput value={state.title || ''} onChange={(val: string) => handleSaveElection('title', val)} /></div>
-              <div><Label>Data</Label><SyncInput type="date" value={state.date || ''} onChange={(val: string) => handleSaveElection('date', val)} /></div>
-              <div><Label>Meta</Label><SyncInput type="number" value={state.voterGoal?.toString() || ''} onChange={(val: string) => handleSaveElection('voterGoal', parseInt(val) || 0)} /></div>
+              <div>
+                <Label>Título da Eleição</Label>
+                <SyncInput value={state.title || ''} onChange={(val: string) => handleSaveElection('title', val)} />
+              </div>
+              <div>
+                <Label>Data</Label>
+                <SyncInput type="date" value={state.date || ''} onChange={(val: string) => handleSaveElection('date', val)} />
+              </div>
+              <div>
+                <Label>Meta de Votantes (Opcional)</Label>
+                <SyncInput type="number" min={0} value={state.voterGoal?.toString() || ''} onChange={(val: string) => handleSaveElection('voterGoal', parseInt(val) || 0)} />
+              </div>
+              <div>
+                <Label>Vagas Presbíteros</Label>
+                <SyncInput type="number" min={0} value={state.presbyterSlots?.toString() || ''} onChange={(val: string) => handleSaveElection('presbyterSlots', parseInt(val) || 0)} />
+              </div>
+              <div>
+                <Label>Vagas Diáconos</Label>
+                <SyncInput type="number" min={0} value={state.deaconSlots?.toString() || ''} onChange={(val: string) => handleSaveElection('deaconSlots', parseInt(val) || 0)} />
+              </div>
             </CardContent>
           </Card>
 
           <Card className="border-blue-900 border-2">
-            <CardHeader className="bg-blue-900/5">
-              <CardTitle className="flex items-center gap-2">
-                <QrCode className="w-5 h-5" /> Gerenciar Eleitores
-              </CardTitle>
+            <CardHeader className="bg-blue-900/5 pb-4">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <CardTitle className="flex items-center gap-2 text-lg text-blue-900 dark:text-blue-400">
+                  <QrCode className="w-5 h-5" /> 
+                  Gerenciar Eleitores (Acesso Via Celular)
+                </CardTitle>
+                <Badge variant="outline" className="bg-blue-100 text-blue-900 border-blue-300 font-bold px-3 py-1 text-sm">
+                  {voters.length} Eleitor(es) Cadastrados
+                </Badge>
+              </div>
+              <p className="text-sm text-muted-foreground mt-1">
+                Gere códigos únicos de 6 dígitos e QR Codes para permitir que os membros votem pelos seus próprios smartphones.
+              </p>
             </CardHeader>
             <CardContent className="pt-6 space-y-6">
-              <div className="flex flex-col sm:flex-row items-end gap-3 bg-muted p-4 rounded-xl">
-                <div className="w-full sm:w-32">
-                  <Label>Qtde:</Label>
-                  <Input type="number" value={voterCountToGenerate} onChange={e => setVoterCountToGenerate(e.target.value)} />
+              <div className="flex flex-col sm:flex-row items-end gap-3 bg-muted/50 p-4 rounded-xl border border-border/50">
+                <div className="w-full sm:w-48">
+                  <Label>Gerar nova quantidade:</Label>
+                  <Input 
+                    type="number" 
+                    min={1} max={500}
+                    value={voterCountToGenerate} 
+                    onChange={e => setVoterCountToGenerate(e.target.value)} 
+                    className="mt-1"
+                  />
                 </div>
-                <Button onClick={handleGenerateVoters} className="bg-blue-600">Gerar</Button>
-                <Button variant="outline" onClick={() => handlePrint(voters)} disabled={voters.length === 0}>Imprimir Todos</Button>
-                <Button variant="destructive" onClick={() => dispatch({ type: 'CLEAR_VOTERS' } as any)}>Limpar</Button>
+                <Button onClick={handleGenerateVoters} className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white">
+                  <Plus className="w-4 h-4 mr-2" /> Gerar Códigos
+                </Button>
+                <div className="flex-1"></div>
+                <div className="flex gap-2 w-full sm:w-auto mt-4 sm:mt-0">
+                  <Button variant="outline" onClick={() => handlePrint(voters)} disabled={voters.length === 0} className="flex-1 sm:flex-none border-blue-600 text-blue-600 hover:bg-blue-50">
+                    <Printer className="w-4 h-4 mr-2" /> Imprimir Todos
+                  </Button>
+                  <Button variant="destructive" onClick={handleClearVoters} disabled={voters.length === 0 || isVotingOpen} className="flex-none" title="Apagar Todos os Códigos">
+                    <Trash2 className="w-4 h-4" /> Excluir Todos
+                  </Button>
+                </div>
               </div>
+              
+              {voters.length > 0 && (
+                <div className="relative max-w-sm">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input 
+                    placeholder="Pesquisar código (ex: 123456)..." 
+                    value={searchVoter}
+                    onChange={(e) => setSearchVoter(e.target.value.replace(/[^0-9]/g, ''))}
+                    maxLength={6}
+                    className="pl-9 bg-background"
+                  />
+                </div>
+              )}
 
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input placeholder="Pesquisar..." value={searchVoter} onChange={(e) => setSearchVoter(e.target.value)} className="pl-9" />
-              </div>
-
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 max-h-60 overflow-y-auto">
-                {filteredVoters.map(v => (
-                  <div key={v.code} className="flex items-center justify-between bg-muted p-2 rounded border">
-                    <span className="font-mono font-bold">{v.code}</span>
-                    <div className="flex">
-                      <Button variant="ghost" size="icon" onClick={() => handlePrint([v])}><Printer className="w-4 h-4" /></Button>
-                      <Button variant="ghost" size="icon" onClick={() => {
-                        const updated = voters.filter(x => x.code !== v.code);
-                        dispatch({ type: 'SET_ELECTION', payload: { voters: updated } });
-                      }}><Trash2 className="w-4 h-4 text-destructive" /></Button>
+              {filteredVoters.length > 0 ? (
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 md:gap-3 max-h-[300px] overflow-y-auto p-2 border rounded-lg bg-card">
+                  {filteredVoters.map(v => (
+                    <div key={v.code} className="flex items-center justify-between bg-muted rounded-md p-1.5 md:p-2 border">
+                      <span className="font-mono font-bold text-base md:text-lg tracking-wider md:tracking-widest pl-1">{v.code}</span>
+                      <div className="flex items-center">
+                        <Button variant="ghost" size="icon" className="h-6 w-6 md:h-7 md:w-7 text-muted-foreground hover:text-blue-600" onClick={() => handlePrint([v])} title="Imprimir este">
+                          <Printer className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-6 w-6 md:h-7 md:w-7 text-muted-foreground hover:text-destructive" onClick={() => handleDeleteSingleVoter(v.code)} title="Excluir este">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              ) : (
+                voters.length > 0 && (
+                  <p className="text-center text-muted-foreground py-4 border rounded-lg bg-muted/20">
+                    Nenhum código encontrado com "{searchVoter}".
+                  </p>
+                )
+              )}
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
-              <div className="flex justify-between items-center">
-                <CardTitle>Candidatos</CardTitle>
-                <Button onClick={() => setShowCandidateForm(true)}>Adicionar</Button>
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <Users className="w-5 h-5 text-gold" /> Candidatos ({state.candidates.length})
+                </CardTitle>
+                <div className="flex flex-wrap gap-2">
+                  <Button size="sm" variant="destructive" onClick={handleClearCandidates} disabled={state.candidates.length === 0 || isVotingOpen}>
+                    <Trash2 className="w-4 h-4 mr-1" /> Apagar Todos
+                  </Button>
+                  <Button size="sm" onClick={() => { setShowCandidateForm(true); setEditingCandidate(null); setForm({ name: '', photo: '', birthDate: '', currentRole: 'membro' }); }} disabled={isVotingOpen}>
+                    <UserPlus className="w-4 h-4 mr-1" /> Adicionar
+                  </Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent>
               {showCandidateForm && (
-                <div className="mb-4 p-4 bg-muted rounded space-y-3">
-                  <Input placeholder="Nome" value={form.name} onChange={e => setForm({...form, name: e.target.value})} />
-                  <Input type="date" value={form.birthDate} onChange={e => setForm({...form, birthDate: e.target.value})} />
-                  <Input type="file" accept="image/*" onChange={handlePhotoUpload} />
-                  <Button onClick={handleAddCandidate}>Salvar</Button>
-                  <Button variant="ghost" onClick={() => setShowCandidateForm(false)}>Cancelar</Button>
+                <div className="mb-6 p-4 rounded-lg bg-muted space-y-3">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div><Label>Nome</Label><Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} /></div>
+                    <div><Label>Data de Nascimento</Label><Input type="date" value={form.birthDate} onChange={e => setForm(f => ({ ...f, birthDate: e.target.value }))} /></div>
+                    <div>
+                      <Label>Cargo Atual</Label>
+                      <Select value={form.currentRole} onValueChange={v => setForm(f => ({ ...f, currentRole: v as CandidateRole }))}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {Object.entries(ROLE_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label>Foto</Label><Input type="file" accept="image/*" onChange={handlePhotoUpload} />
+                      {form.photo && <img src={form.photo} alt="" className="w-12 h-12 rounded-full mt-2 object-cover" />}
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button size="sm" onClick={handleAddCandidate}>{editingCandidate ? 'Salvar' : 'Adicionar'}</Button>
+                    <Button size="sm" variant="ghost" onClick={() => setShowCandidateForm(false)}>Cancelar</Button>
+                  </div>
                 </div>
               )}
-              <div className="grid gap-2 sm:grid-cols-2">
-                {state.candidates.map(c => (
-                  <div key={c.id} className="flex items-center gap-3 p-2 border rounded">
-                    <div className="w-10 h-10 rounded-full bg-slate-200 overflow-hidden">
-                      {c.photo && <img src={c.photo} className="w-full h-full object-cover" />}
+              {state.candidates.length === 0 ? (
+                <p className="text-muted-foreground text-center py-8">Nenhum candidato cadastrado</p>
+              ) : (
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {state.candidates.map(c => (
+                    <div key={c.id} className="flex items-center gap-3 p-3 rounded-lg border bg-card">
+                      <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center overflow-hidden shrink-0">
+                        {c.photo ? <img src={c.photo} alt={c.name} className="w-full h-full object-cover" /> : <Users className="w-5 h-5 text-muted-foreground" />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-sm truncate">{c.name}</p>
+                        <Badge variant="secondary" className="text-xs">{ROLE_LABELS[c.currentRole]}</Badge>
+                      </div>
+                      <Button variant="ghost" size="icon" className="shrink-0 text-muted-foreground hover:text-destructive" onClick={() => dispatch({ type: 'REMOVE_CANDIDATE', payload: c.id })} disabled={isVotingOpen}>
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
                     </div>
-                    <span className="flex-1 font-semibold">{c.name}</span>
-                    <Button variant="ghost" size="icon" onClick={() => dispatch({ type: 'REMOVE_CANDIDATE', payload: c.id })}><Trash2 className="w-4 h-4" /></Button>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader><CardTitle>Escrutínios</CardTitle></CardHeader>
+            <CardHeader>
+              <CardTitle className="text-lg">Gerenciar Escrutínios</CardTitle>
+            </CardHeader>
             <CardContent className="space-y-4">
-              {!isVotingOpen ? (
-                <div className="flex gap-2">
-                  <Button onClick={() => handleInitiateStartScrutiny('presbitero')}>Presbíteros</Button>
-                  <Button onClick={() => handleInitiateStartScrutiny('diacono')}>Diáconos</Button>
-                </div>
-              ) : (
-                <div className="p-4 bg-green-50 border border-green-200 rounded">
-                  <p className="font-bold text-green-700">Votação em Curso</p>
-                  <Button variant="destructive" className="mt-2" onClick={() => dispatch({ type: 'CLOSE_SCRUTINY', payload: currentScrutiny!.id })}>Encerrar</Button>
+              {startingScrutinyType && (
+                <div className="p-4 rounded-lg bg-muted border-2 border-gold/30 space-y-6">
+                  <div className="border-b border-border pb-4">
+                    <h3 className="font-display font-bold text-xl">
+                      Iniciar {startingScrutinyType === 'presbitero' ? 'Eleição de Presbíteros' : 'Eleição de Diáconos'}
+                    </h3>
+                    {(() => {
+                      const info = getScrutinyInfo(startingScrutinyType);
+                      return (
+                        <div className="text-sm text-muted-foreground mt-1 space-y-1">
+                          <p><strong>{info.nextRound}º Escrutínio</strong> — {info.remainingSlots} vaga(s) restante(s)</p>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                  <div className="space-y-4 bg-background p-4 rounded-lg border">
+                    <h4 className="font-bold text-md flex items-center gap-2">
+                      <ShieldCheck className="w-5 h-5 text-gold" />
+                      Método de Autenticação da Urna
+                    </h4>
+                    <div className="grid sm:grid-cols-2 gap-4">
+                      <div 
+                        className={`border-2 rounded-xl p-4 cursor-pointer transition-all ${authMode === 'pin' ? 'border-gold bg-gold/5 shadow-md' : 'border-border hover:border-gold/50'}`}
+                        onClick={() => setAuthMode('pin')}
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2 font-bold text-lg"><Tablet className="w-5 h-5"/> Tablets Físicos</div>
+                          <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${authMode === 'pin' ? 'border-gold' : 'border-muted-foreground'}`}>
+                            {authMode === 'pin' && <div className="w-2 h-2 bg-gold rounded-full" />}
+                          </div>
+                        </div>
+                        <p className="text-sm text-muted-foreground mb-4">Mesário controla a fila. O eleitor vota e o mesário desbloqueia a urna com uma senha.</p>
+                        {authMode === 'pin' && (
+                          <div className="space-y-2 mt-auto" onClick={e => e.stopPropagation()}>
+                            <Label>Defina o PIN do Mesário (4 dígitos):</Label>
+                            <Input 
+                              type="text" maxLength={4} value={customPin} 
+                              onChange={e => setCustomPin(e.target.value.replace(/[^0-9]/g, ''))}
+                              className="font-mono text-lg font-bold tracking-widest text-center"
+                            />
+                          </div>
+                        )}
+                      </div>
+                      <div 
+                        className={`border-2 rounded-xl p-4 cursor-pointer transition-all ${authMode === 'code' ? 'border-blue-600 bg-blue-600/5 shadow-md' : 'border-border hover:border-blue-600/50'}`}
+                        onClick={() => setAuthMode('code')}
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2 font-bold text-lg text-blue-600 dark:text-blue-400"><Smartphone className="w-5 h-5"/> Celular Pessoal</div>
+                          <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${authMode === 'code' ? 'border-blue-600' : 'border-muted-foreground'}`}>
+                            {authMode === 'code' && <div className="w-2 h-2 bg-blue-600 rounded-full" />}
+                          </div>
+                        </div>
+                        <p className="text-sm text-muted-foreground">Cada eleitor acessa o site do próprio celular e escaneia o Código/QR Code individual.</p>
+                        {authMode === 'code' && (
+                          <div className="mt-4 bg-blue-600/10 p-3 rounded-lg border border-blue-600/20 text-sm text-blue-900 dark:text-blue-200">
+                            <strong>Aviso:</strong> A urna só aceitará votos validados pelos {voters.length} códigos cadastrados.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {state.candidates.filter(c => !((startingScrutinyType === 'presbitero' ? state.electedPresbyters : state.electedDeacons).includes(c.id))).map(c => {
+                        const isSelected = selectedParticipants.includes(c.id);
+                        return (
+                          <label key={c.id} className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${isSelected ? 'bg-gold/10 border-gold/30' : 'bg-card hover:bg-muted'}`}>
+                            <Checkbox checked={isSelected} onCheckedChange={(checked) => setSelectedParticipants(prev => checked ? [...prev, c.id] : prev.filter(id => id !== c.id))} />
+                            <div className="min-w-0"><p className="font-semibold text-sm truncate">{c.name}</p></div>
+                          </label>
+                        );
+                      })}
+                  </div>
+                  <div className="flex gap-2 pt-4 border-t border-border">
+                    <Button onClick={handleConfirmStartScrutiny} className="bg-gold text-accent-foreground hover:bg-gold-light text-lg px-8"><Play className="w-5 h-5 mr-2" /> Iniciar Votação</Button>
+                    <Button variant="ghost" onClick={() => setStartingScrutinyType(null)} className="text-lg">Cancelar</Button>
+                  </div>
                 </div>
               )}
-              
-              {startingScrutinyType && (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-[100]">
-                  <Card className="w-full max-w-md">
-                    <CardHeader><CardTitle>Iniciar Votação</CardTitle></CardHeader>
-                    <CardContent className="space-y-4">
-                      <div className="grid grid-cols-2 gap-2">
-                        <Button variant={authMode === 'pin' ? 'default' : 'outline'} onClick={() => setAuthMode('pin')}>Mesário (PIN)</Button>
-                        <Button variant={authMode === 'code' ? 'default' : 'outline'} onClick={() => setAuthMode('code')}>Membros (QR)</Button>
-                      </div>
-                      {authMode === 'pin' && <Input placeholder="PIN de 4 dígitos" value={customPin} onChange={e => setCustomPin(e.target.value)} />}
-                      <div className="flex gap-2">
-                        <Button onClick={handleConfirmStartScrutiny} className="flex-1">Começar</Button>
-                        <Button variant="ghost" onClick={() => setStartingScrutinyType(null)}>Sair</Button>
-                      </div>
-                    </CardContent>
-                  </Card>
+
+              {isVotingOpen && currentScrutiny && (
+                <div className="p-4 rounded-lg bg-success/10 border border-success/30">
+                  <p className="font-semibold text-success flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-success animate-pulse" />
+                    Votação em andamento: {currentScrutiny.type === 'presbitero' ? 'Presbíteros' : 'Diáconos'} — {currentScrutiny.round}º escrutínio
+                  </p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Votos computados: {currentScrutiny.totalVotes} / {currentScrutiny.authMode === 'code' ? voters.length : state.voterGoal}
+                  </p>
+                  <div className="flex flex-wrap gap-2 mt-3">
+                    <Button variant="destructive" size="sm" onClick={handleCloseScrutiny}>
+                      <Square className="w-4 h-4 mr-1" /> Encerrar Votação
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => handleRestartScrutiny(currentScrutiny.id)} className="border-destructive text-destructive hover:bg-destructive/10">
+                      <RotateCcw className="w-4 h-4 mr-1" /> Reiniciar Escrutínio Atual
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {!isVotingOpen && !startingScrutinyType && (
+                <div className="flex flex-wrap gap-3">
+                  {(() => {
+                    const pInfo = getScrutinyInfo('presbitero');
+                    return pInfo.remainingSlots > 0 ? (
+                      <Button onClick={() => handleInitiateStartScrutiny('presbitero')} disabled={state.candidates.length === 0 || state.presbyterSlots === 0} className="bg-navy hover:bg-navy-light text-primary-foreground"><Play className="w-4 h-4 mr-1" /> Presbíteros ({pInfo.nextRound}º esc.)</Button>
+                    ) : state.presbyterSlots > 0 ? <Badge variant="secondary" className="py-2 px-4">✅ Presbíteros preenchidos</Badge> : null;
+                  })()}
+                  {(() => {
+                    const dInfo = getScrutinyInfo('diacono');
+                    return dInfo.remainingSlots > 0 ? (
+                      <Button onClick={() => handleInitiateStartScrutiny('diacono')} disabled={state.candidates.length === 0 || state.deaconSlots === 0} className="bg-navy hover:bg-navy-light text-primary-foreground"><Play className="w-4 h-4 mr-1" /> Diáconos ({dInfo.nextRound}º esc.)</Button>
+                    ) : state.deaconSlots > 0 ? <Badge variant="secondary" className="py-2 px-4">✅ Diáconos preenchidos</Badge> : null;
+                  })()}
+                </div>
+              )}
+
+              {state.scrutinies.filter(s => s.status === 'closed').length > 0 && (
+                <div className="mt-4">
+                  <h3 className="font-semibold text-sm text-muted-foreground mb-4">Escrutínios Encerrados</h3>
+                  <div className="space-y-4">
+                    {state.scrutinies.filter(s => s.status === 'closed').reverse().map(s => {
+                      const sorted = Object.entries(s.votes).filter(([id]) => s.participatingCandidateIds.includes(id)).sort((a, b) => b[1] - a[1]);
+                      return (
+                        <div key={s.id} className="p-4 rounded-lg border bg-muted/50 text-sm">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-3 border-b pb-3 border-muted-foreground/20">
+                            <p className="font-semibold text-base">
+                              {s.type === 'presbitero' ? 'Presbíteros' : 'Diáconos'} — {s.round}º escrutínio ({s.totalVotes} votos)
+                            </p>
+                            <div className="flex flex-wrap items-center gap-2 shrink-0">
+                              {!isVotingOpen && (
+                                <Button variant="outline" size="sm" onClick={() => handleRestartScrutiny(s.id)} className="text-destructive border-destructive hover:bg-destructive/10 whitespace-nowrap">
+                                  <RotateCcw className="w-4 h-4 mr-1" /> Reiniciar
+                                </Button>
+                              )}
+                              {!s.resultsApproved ? (
+                                <Button size="sm" onClick={() => handleApproveResults(s.id)} className="bg-gold text-accent-foreground hover:bg-gold-light whitespace-nowrap">
+                                  <Eye className="w-4 h-4 mr-1" /> Aprovar Resultado
+                                </Button>
+                              ) : (
+                                <Badge className="bg-success text-success-foreground whitespace-nowrap px-3 py-1 flex items-center gap-1">
+                                  <CheckCircle2 className="w-3 h-3" /> Liberado
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                          <div className="space-y-2">
+                            {sorted.map(([cId, v]) => (
+                              <div key={cId} className="flex justify-between items-center">
+                                <span className={s.electedIds.includes(cId) ? 'font-bold text-success' : ''}>{s.electedIds.includes(cId) && '✓ '}{state.candidates.find(x => x.id === cId)?.name}</span>
+                                <span className="font-mono bg-background px-2 py-0.5 rounded text-xs">{v} votos</span>
+                              </div>
+                            ))}
+                            <div className="flex justify-between items-center mt-3 pt-3 border-t border-muted-foreground/20">
+                              <span className="font-semibold text-muted-foreground uppercase text-xs tracking-wider">Votos em Branco</span>
+                              <span className="font-mono text-muted-foreground bg-background px-2 py-0.5 rounded text-xs">{s.blankVotes || 0} votos</span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
             </CardContent>
@@ -347,31 +741,42 @@ export default function Admin() {
         </main>
       </div>
 
-      {/* ÁREA DE IMPRESSÃO (LIMPA) */}
-      <div className="print-only">
-        {printingVoters.map((v, index) => (
-          <div key={v.code} className="ticket">
-            <div style={{ fontWeight: 'bold', fontSize: '14px' }}>IPB NOVA BRASÍLIA</div>
-            <div style={{ fontSize: '10px', marginBottom: '10px' }}>ASSEMBLEIA EXTRAORDINÁRIA</div>
-            
-            <div style={{ borderTop: '1px dashed black', borderBottom: '1px dashed black', padding: '10px 0', margin: '10px 0' }}>
-              <div style={{ fontSize: '10px' }}>CÓDIGO DE ACESSO</div>
-              <div style={{ fontSize: '32px', fontWeight: 'bold', fontFamily: 'monospace' }}>{v.code}</div>
+      {/* MÓDULO DE IMPRESSÃO (ULTRA BLINDADO) */}
+      {printingVoters.length > 0 && (
+        <div className="hidden print-container font-sans text-black bg-white" style={{ position: 'absolute', top: 0, left: 0 }}>
+          {printingVoters.map((v, index) => (
+            <div 
+              key={v.code} 
+              className="flex flex-col items-center justify-center p-2 text-center w-full"
+              style={{ 
+                pageBreakAfter: index === printingVoters.length - 1 ? 'auto' : 'always', 
+                breakInside: 'avoid',
+                margin: '0 auto',
+                paddingBottom: '20px' // Margem segura para o corte físico da impressora
+              }}
+            >
+              <h2 className="font-bold text-lg leading-tight uppercase">IPB Nova Brasília</h2>
+              <p className="text-[10px] font-bold uppercase mt-1">Assembleia Extraordinária</p>
+              
+              <div className="my-3 border-t-2 border-b-2 border-dashed border-black py-3 w-full">
+                <p className="text-xs uppercase mb-1 font-bold">CÓDIGO DE ACESSO</p>
+                <h1 className="text-4xl font-bold font-mono tracking-widest">{v.code}</h1>
+              </div>
+              
+              <div className="bg-white p-2 border-2 border-black rounded-lg">
+                <QRCodeSVG value={v.code} size={140} level="H" />
+              </div>
+              
+              <p className="text-[10px] mt-4 font-bold uppercase leading-tight">
+                Acesse o aplicativo da urna e aproxime<br/>este QR Code da câmera.
+              </p>
+              <p className="text-[9px] mt-1 text-black/60 pb-4">
+                Uso único e intransferível.
+              </p>
             </div>
-            
-            <div style={{ display: 'flex', justifyContent: 'center', margin: '10px 0' }}>
-              <QRCodeSVG value={v.code} size={120} level="M" />
-            </div>
-            
-            <div style={{ fontSize: '10px', marginTop: '10px', lineHeight: '1.2' }}>
-              Aproxime este QR Code da câmera<br />na tela de identificação da urna.
-            </div>
-            <div style={{ fontSize: '9px', marginTop: '5px', opacity: 0.7 }}>
-              Uso único e intransferível.
-            </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </>
   );
 }
