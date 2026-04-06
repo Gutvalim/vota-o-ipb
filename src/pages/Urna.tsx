@@ -91,7 +91,7 @@ export default function Urna() {
       html5QrCode = new Html5Qrcode("qr-reader");
       
       html5QrCode.start(
-        { facingMode: "environment" }, // Força a câmera traseira
+        { facingMode: "environment" }, 
         {
           fps: 10,
           qrbox: { width: 250, height: 250 }
@@ -110,7 +110,7 @@ export default function Urna() {
         }
       ).catch((err) => {
         console.error(err);
-        toast.error("Erro ao acessar a câmera. Verifique as permissões do navegador.");
+        toast.error("Erro ao aceder à câmara. Verifique as permissões do navegador.");
         setIsScanning(false);
       });
     }
@@ -158,7 +158,7 @@ export default function Urna() {
     setSelectedIds(prev => {
       if (prev.includes(id)) return prev.filter(x => x !== id);
       if (prev.length >= effectiveMax) {
-        toast.error(`Você só pode selecionar até ${effectiveMax} candidato(s)`, {
+        toast.error(`Apenas pode selecionar até ${effectiveMax} candidato(s)`, {
           position: 'top-center',
           duration: 3500,
         });
@@ -234,56 +234,83 @@ export default function Urna() {
           {state.title || 'Sistema de Votação'}
         </h1>
         <p className="text-primary-foreground/60 text-2xl mb-8 text-center px-4">
-          {votingClosed ? 'A votação foi encerrada. Aguarde o resultado.' : 'Nenhuma votação em andamento no momento.'}
+          {votingClosed ? 'A votação foi encerrada. Aguarde o resultado.' : 'Nenhuma votação a decorrer no momento.'}
         </p>
       </div>
     );
   }
 
-  // TELA DE AUTENTICAÇÃO DO ELEITOR (Se o modo for "Código/Celular")
+  // TELA DE AUTENTICAÇÃO DO ELEITOR (Modo Código/Celular)
   if (authMode === 'code' && !authenticatedCode && !hasVoted) {
     return (
-      <div className="h-screen flex flex-col bg-primary overflow-hidden relative">
-        <header className="p-4 border-b border-primary-foreground/10 flex items-center gap-4">
+      <div className="h-screen flex flex-col bg-primary overflow-x-hidden overflow-y-auto relative">
+        <header className="shrink-0 p-4 border-b border-primary-foreground/10 flex items-center gap-4">
           <Button variant="ghost" size="icon" onClick={() => navigate('/')} className="text-primary-foreground/20 hover:text-primary-foreground hover:bg-primary-foreground/10">
             <ArrowLeft className="w-7 h-7" />
           </Button>
           <h1 className="text-2xl font-display font-bold text-primary-foreground">Acesso do Eleitor</h1>
         </header>
 
-        <main className="flex-1 flex flex-col items-center justify-center p-6">
-          <div className="w-full max-w-md bg-primary-foreground/5 p-8 rounded-3xl border border-primary-foreground/10 shadow-2xl flex flex-col items-center text-center">
+        <main className="flex-1 flex flex-col items-center justify-center p-4">
+          <div className="w-full max-w-md bg-primary-foreground/5 p-6 md:p-8 rounded-3xl border border-primary-foreground/10 shadow-2xl flex flex-col items-center text-center">
             
-            <KeyRound className="w-16 h-16 text-gold mb-6" />
-            <h2 className="text-3xl font-display font-bold text-primary-foreground mb-2">Identificação</h2>
-            <p className="text-primary-foreground/70 text-lg mb-8">
-              Insira o código de 6 dígitos que você recebeu para liberar a urna.
+            <KeyRound className="w-12 h-12 md:w-16 md:h-16 text-gold mb-4" />
+            <h2 className="text-2xl md:text-3xl font-display font-bold text-primary-foreground mb-2">Identificação</h2>
+            <p className="text-primary-foreground/70 text-base md:text-lg mb-6">
+              Insira o código de 6 dígitos que recebeu para desbloquear a urna.
             </p>
 
             {isScanning ? (
-              <div className="w-full mb-6">
+              <div className="w-full mb-4">
                 <div id="qr-reader" className="w-full overflow-hidden rounded-xl border-2 border-gold/50 bg-black min-h-[250px]"></div>
                 <Button variant="ghost" onClick={() => setIsScanning(false)} className="mt-4 text-primary-foreground w-full py-6">
-                  Cancelar Leitura da Câmera
+                  Cancelar Leitura da Câmara
                 </Button>
               </div>
             ) : (
-              <div className="w-full space-y-4">
-                <input
-                  type="text"
-                  maxLength={6}
-                  placeholder="000000"
-                  value={authInput}
-                  onChange={e => setAuthInput(e.target.value.replace(/[^0-9]/g, ''))}
-                  className="w-full bg-background/50 border-2 border-primary-foreground/20 text-primary-foreground text-center text-4xl tracking-widest font-mono py-4 rounded-xl focus:border-gold focus:ring-0 outline-none"
-                />
+              <div className="w-full">
+                {/* Visor do Código */}
+                <div className="w-full bg-background/50 border-2 border-primary-foreground/20 text-primary-foreground text-center text-4xl tracking-widest font-mono py-4 rounded-xl min-h-[72px] flex items-center justify-center mb-4">
+                  {authInput ? authInput : <span className="text-primary-foreground/30">000000</span>}
+                </div>
+
+                {/* Teclado Numérico (Numpad) do Eleitor */}
+                <div className="grid grid-cols-3 gap-2 w-full max-w-[280px] mx-auto mb-4">
+                  {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(num => (
+                    <button
+                      key={num}
+                      onClick={() => setAuthInput(prev => prev.length < 6 ? prev + num.toString() : prev)}
+                      className="w-full aspect-[4/3] rounded-xl bg-primary-foreground/10 text-primary-foreground text-2xl font-bold hover:bg-primary-foreground/20 active:bg-primary-foreground/30 transition-colors flex items-center justify-center"
+                    >
+                      {num}
+                    </button>
+                  ))}
+                  <button
+                    onClick={() => setAuthInput('')}
+                    className="w-full aspect-[4/3] rounded-xl bg-destructive/20 text-destructive hover:bg-destructive/30 active:bg-destructive/40 transition-colors flex items-center justify-center"
+                  >
+                    <XCircle className="w-6 h-6" />
+                  </button>
+                  <button
+                    onClick={() => setAuthInput(prev => prev.length < 6 ? prev + '0' : prev)}
+                    className="w-full aspect-[4/3] rounded-xl bg-primary-foreground/10 text-primary-foreground text-2xl font-bold hover:bg-primary-foreground/20 active:bg-primary-foreground/30 transition-colors flex items-center justify-center"
+                  >
+                    0
+                  </button>
+                  <button
+                    onClick={() => setAuthInput(prev => prev.slice(0, -1))}
+                    className="w-full aspect-[4/3] rounded-xl bg-primary-foreground/10 text-primary-foreground hover:bg-primary-foreground/20 active:bg-primary-foreground/30 transition-colors flex items-center justify-center"
+                  >
+                      <Delete className="w-6 h-6" />
+                  </button>
+                </div>
                 
                 <Button 
                   onClick={() => handleValidateVoterCode(authInput)}
                   disabled={authInput.length < 6}
-                  className="w-full bg-gold text-accent-foreground hover:bg-gold-light text-xl py-6 font-bold"
+                  className="w-full bg-gold text-accent-foreground hover:bg-gold-light text-lg md:text-xl py-6 font-bold"
                 >
-                  ACESSAR URNA
+                  ACEDER À URNA
                 </Button>
 
                 <div className="flex items-center gap-4 w-full py-4">
@@ -298,7 +325,7 @@ export default function Urna() {
                   className="w-full border-blue-500 text-blue-500 hover:bg-blue-500/10 hover:text-blue-400 text-base sm:text-lg py-6 font-bold h-auto whitespace-normal flex items-center justify-center"
                 >
                   <Camera className="w-6 h-6 mr-2 shrink-0" />
-                  <span>LER QR CODE COM A CÂMERA</span>
+                  <span>LER QR CODE COM A CÂMARA</span>
                 </Button>
               </div>
             )}
@@ -318,7 +345,7 @@ export default function Urna() {
             Voto NÃO<br/>Computado!
           </h1>
           <p className="text-primary-foreground/90 text-lg md:text-2xl mb-6 font-bold px-2">
-            Houve uma falha na conexão com o servidor.
+            Houve uma falha na ligação com o servidor.
           </p>
           <div className="w-full bg-primary/50 p-4 md:p-6 rounded-xl border border-primary-foreground/10 mb-8">
             <p className="text-primary-foreground/70 text-base md:text-xl">
@@ -354,14 +381,13 @@ export default function Urna() {
               Voto Confirmado!
             </h1>
             <p className="text-primary-foreground/60 text-lg md:text-2xl mb-8">
-              Seu voto foi registrado com sucesso. Seu código de acesso foi inativado.
+              O seu voto foi registado com sucesso. O seu código de acesso foi inativado.
             </p>
             <div className="bg-primary-foreground/5 p-4 rounded-xl border border-primary-foreground/10 mb-8 w-full">
                <p className="text-gold font-bold text-xl">Muito obrigado pela participação.</p>
-               <p className="text-primary-foreground/50 mt-2">Pode fechar o aplicativo ou passar para o próximo.</p>
+               <p className="text-primary-foreground/50 mt-2">Pode fechar a aplicação ou passar ao próximo.</p>
             </div>
             
-            {/* NOVO: Botão para a urna compartilhada no modo celular */}
             <Button 
               onClick={handleNewVote} 
               className="bg-gold text-accent-foreground hover:bg-gold-light text-lg md:text-2xl px-8 py-6 h-auto w-full md:w-auto font-bold whitespace-normal"
@@ -376,7 +402,7 @@ export default function Urna() {
               Voto Confirmado!
             </h1>
             <p className="text-primary-foreground/60 text-lg md:text-2xl mb-12">
-              Seu voto foi registrado com segurança no servidor.
+              O seu voto foi registado com segurança no servidor.
             </p>
             <Button 
               onClick={() => setShowPinPad(true)} 
@@ -444,10 +470,10 @@ export default function Urna() {
             Aguarde...
           </h1>
           <p className="text-primary-foreground/90 text-lg md:text-2xl mb-4 font-bold px-2">
-            Enviando seu voto para o servidor.
+            A enviar o seu voto para o servidor.
           </p>
           <p className="text-primary-foreground/70 text-base md:text-xl mt-2 px-2">
-            Não feche o aplicativo e não desligue a tela.
+            Não feche a aplicação e não desligue o ecrã.
           </p>
         </div>
       </div>
