@@ -4,7 +4,6 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, CheckCircle2, XCircle, Vote, Users, Sun, Moon, Loader2, Lock, Delete, Camera, KeyRound } from 'lucide-react';
 import { toast } from 'sonner';
-// ATUALIZAÇÃO: Usando o motor puro da câmera em vez do Scanner pré-montado
 import { Html5Qrcode } from 'html5-qrcode';
 
 const playConfirmSound = () => {
@@ -84,7 +83,7 @@ export default function Urna() {
     setIsScanning(false);
   }
 
-  // ATUALIZAÇÃO: Câmera abre direto na lente traseira (environment)
+  // Câmera abre direto na lente traseira (environment)
   useEffect(() => {
     let html5QrCode: Html5Qrcode;
 
@@ -134,7 +133,6 @@ export default function Urna() {
     }
 
     if (currentScrutiny?.votedCodes?.includes(cleanCode)) {
-      // ATUALIZAÇÃO: Mudança da palavra "turno" para "escrutínio"
       toast.error('VOTO NEGADO: Este código já foi utilizado neste escrutínio.', { position: 'top-center', duration: 5000 });
       return;
     }
@@ -294,7 +292,6 @@ export default function Urna() {
                   <div className="flex-1 h-px bg-primary-foreground/20"></div>
                 </div>
 
-                {/* ATUALIZAÇÃO: Botão da Câmera ajustado para não vazar texto em telas pequenas */}
                 <Button 
                   onClick={() => setIsScanning(true)}
                   variant="outline"
@@ -351,18 +348,26 @@ export default function Urna() {
       <div className="h-screen flex flex-col items-center justify-center bg-primary p-4 overflow-hidden">
         
         {authMode === 'code' ? (
-           <div className="text-center w-full max-w-md md:max-w-2xl px-4">
-            <CheckCircle2 className="w-24 h-24 md:w-32 md:h-32 text-success mx-auto mb-6 shrink-0" />
+           <div className="text-center w-full max-w-md md:max-w-2xl px-4 flex flex-col items-center">
+            <CheckCircle2 className="w-24 h-24 md:w-32 md:h-32 text-success mb-6 shrink-0" />
             <h1 className="text-4xl md:text-6xl font-display font-bold text-primary-foreground mb-4 leading-tight">
               Voto Confirmado!
             </h1>
-            <p className="text-primary-foreground/60 text-lg md:text-2xl mb-12">
+            <p className="text-primary-foreground/60 text-lg md:text-2xl mb-8">
               Seu voto foi registrado com sucesso. Seu código de acesso foi inativado.
             </p>
-            <div className="bg-primary-foreground/5 p-4 rounded-xl border border-primary-foreground/10">
+            <div className="bg-primary-foreground/5 p-4 rounded-xl border border-primary-foreground/10 mb-8 w-full">
                <p className="text-gold font-bold text-xl">Muito obrigado pela participação.</p>
-               <p className="text-primary-foreground/50 mt-2">Você já pode fechar o aplicativo ou aguardar o próximo escrutínio.</p>
+               <p className="text-primary-foreground/50 mt-2">Pode fechar o aplicativo ou passar para o próximo.</p>
             </div>
+            
+            {/* NOVO: Botão para a urna compartilhada no modo celular */}
+            <Button 
+              onClick={handleNewVote} 
+              className="bg-gold text-accent-foreground hover:bg-gold-light text-lg md:text-2xl px-8 py-6 h-auto w-full md:w-auto font-bold whitespace-normal"
+            >
+              Próximo Eleitor (Voltar ao Início)
+            </Button>
           </div>
         ) : !showPinPad ? (
           <div className="text-center w-full max-w-md md:max-w-2xl px-4">
