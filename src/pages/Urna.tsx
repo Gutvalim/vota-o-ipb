@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useElection } from '@/contexts/ElectionContext';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -53,18 +53,21 @@ export default function Urna() {
   const currentScrutiny = state.scrutinies.find(s => s.id === state.currentScrutinyId);
   const isOpen = currentScrutiny?.status === 'open';
   const votingClosed = currentScrutiny && currentScrutiny.status === 'closed';
-  
-  // Variável que guarda a hora exata que a urna foi aberta/reiniciada
-  const scrutinyStartedAt = currentScrutiny?.startedAt;
 
-  // NOVO VIGIA: Amnésia Absoluta. Ativa se mudar de ID, se abrir/fechar, ou se reiniciar.
-  useEffect(() => {
-    setSelectedIds([]);
+  // NOVO: Limpeza Síncrona Forçada (Padrão Ouro do React para reset de estado)
+  // Criamos uma "Chave Única" para o momento atual da eleição
+  const currentScrutinyKey = `${state.currentScrutinyId}-${currentScrutiny?.startedAt}-${isOpen}`;
+  const [syncKey, setSyncKey] = useState(currentScrutinyKey);
+
+  // Se a eleição mudou (fechou, abriu, ou reiniciou), o código zera a urna ANTES de renderizar
+  if (syncKey !== currentScrutinyKey) {
+    setSyncKey(currentScrutinyKey);
+    setSelectedIds([]); // Amnésia total e imediata
     setShowConfirm(false);
     setVoteError(false);
     setHasVoted(false);
     setIsSubmitting(false);
-  }, [state.currentScrutinyId, isOpen, scrutinyStartedAt]);
+  }
 
   const alreadyElected = currentScrutiny?.type === 'presbitero' ? state.electedPresbyters : state.electedDeacons;
   const totalSlots = currentScrutiny?.type === 'presbitero' ? state.presbyterSlots : state.deaconSlots;
@@ -161,7 +164,7 @@ export default function Urna() {
           <Button 
             onClick={() => {
               setVoteError(false);
-              setSelectedIds([]); // Garante que os votos somem por privacidade
+              setSelectedIds([]); // Garante que os votos somem por privacidade antes do mesário olhar
             }} 
             className="bg-destructive text-destructive-foreground hover:bg-destructive/90 text-sm md:text-xl px-4 py-6 w-full shadow-xl font-bold tracking-wide h-auto whitespace-normal"
           >
