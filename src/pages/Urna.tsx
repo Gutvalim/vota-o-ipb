@@ -94,13 +94,12 @@ export default function Urna() {
       setShowConfirm(false);
       
     } catch (error: any) {
-      // NOVO: Mensagem de erro que não some sozinha e orienta a chamar o mesário
       toast.error(error.message || 'ERRO: Seu voto NÃO foi computado! Por favor, chame um mesário.', {
-        duration: Infinity, // Trava a mensagem na tela para sempre
+        duration: Infinity, 
         position: 'top-center',
         action: {
           label: 'Entendi, vou tentar de novo',
-          onClick: () => {} // Apenas fecha o toast quando o botão for clicado
+          onClick: () => {} 
         }
       });
       setShowConfirm(false); 
@@ -286,7 +285,7 @@ export default function Urna() {
               ) : showConfirm ? (
                 'CONFIRMAR'
               ) : selectedIds.length === 0 ? (
-                `VOTAR EM BRANCO`
+                <><Vote className="w-6 h-6 md:w-8 md:h-8 mr-2" /> VOTAR</>
               ) : (
                 <><Vote className="w-6 h-6 md:w-8 md:h-8 mr-2" /> VOTAR ({selectedIds.length})</>
               )}
