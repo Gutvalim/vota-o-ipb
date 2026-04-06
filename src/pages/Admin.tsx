@@ -58,8 +58,6 @@ export default function Admin() {
 
   const [voterCountToGenerate, setVoterCountToGenerate] = useState<number | string>(1);
   const [printingVoters, setPrintingVoters] = useState<Voter[]>([]);
-  
-  // NOVO: Estado para a barra de pesquisa de eleitores
   const [searchVoter, setSearchVoter] = useState('');
 
   const [authMode, setAuthMode] = useState<'pin' | 'code'>('pin');
@@ -100,18 +98,15 @@ export default function Admin() {
         const MAX_HEIGHT = 300;
         let width = img.width;
         let height = img.height;
-
         if (width > height) {
           if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; }
         } else {
           if (height > MAX_HEIGHT) { width *= MAX_HEIGHT / height; height = MAX_HEIGHT; }
         }
-
         canvas.width = width;
         canvas.height = height;
         const ctx = canvas.getContext('2d');
         ctx?.drawImage(img, 0, 0, width, height);
-
         const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
         setForm(f => ({ ...f, photo: compressedBase64 }));
       };
@@ -159,7 +154,6 @@ export default function Admin() {
       if (lastScrutiny) {
         eligibleCandidates = eligibleCandidates.filter(c => lastScrutiny.participatingCandidateIds.includes(c.id));
       }
-
       if (nextRound >= 3 && lastScrutiny) {
         const sortedFromLast = Object.entries(lastScrutiny.votes)
           .filter(([id]) => lastScrutiny.participatingCandidateIds.includes(id) && !alreadyElected.includes(id))
@@ -170,15 +164,12 @@ export default function Admin() {
             if (!ca || !cb) return 0;
             return new Date(ca.birthDate).getTime() - new Date(cb.birthDate).getTime();
           });
-          
         const funnelCount = remainingSlots * 2;
         const funnelIds = sortedFromLast.slice(0, funnelCount).map(([id]) => id);
         eligibleCandidates = eligibleCandidates.filter(c => funnelIds.includes(c.id));
       }
-      
       initialSelected = eligibleCandidates.map(c => c.id);
     }
-
     setSelectedParticipants(initialSelected);
     setStartingScrutinyType(type);
     setAuthMode('pin'); 
@@ -199,9 +190,7 @@ export default function Admin() {
       toast.error('Não há eleitores cadastrados. Vá na aba Gerenciar Eleitores primeiro.');
       return;
     }
-
     const existingRounds = state.scrutinies.filter(s => s.type === startingScrutinyType).length;
-    
     try {
       await dispatch({
         type: 'START_SCRUTINY',
@@ -213,7 +202,6 @@ export default function Admin() {
           pin: authMode === 'pin' ? customPin : ""
         },
       });
-      
       toast.success(`Votação iniciada no modo: ${authMode === 'pin' ? 'Tablet/Mesário' : 'Celular (QR Code)'}`);
       setStartingScrutinyType(null);
       setSelectedParticipants([]);
@@ -274,7 +262,6 @@ export default function Admin() {
       toast.error('Informe uma quantidade válida (Max: 500 por vez).');
       return;
     }
-
     const newVoters: Voter[] = [];
     for (let i = 0; i < count; i++) {
       let code;
@@ -285,7 +272,6 @@ export default function Admin() {
       } while (isDuplicate);
       newVoters.push({ code, createdAt: Date.now() });
     }
-
     dispatch({ type: 'ADD_VOTERS', payload: newVoters });
     toast.success(`${count} códigos gerados com sucesso!`);
     setVoterCountToGenerate(1);
@@ -309,13 +295,11 @@ export default function Admin() {
   const handlePrint = (votersToPrint: Voter[]) => {
     if (votersToPrint.length === 0) return;
     setPrintingVoters(votersToPrint);
-    
     setTimeout(() => {
       window.print();
     }, 800);
   };
 
-  // Ordena a lista geral (mais novos primeiro) e depois aplica o filtro da barra de pesquisa
   const sortedVoters = [...voters].sort((a, b) => b.createdAt - a.createdAt);
   const filteredVoters = sortedVoters.filter(v => v.code.includes(searchVoter));
 
@@ -323,12 +307,28 @@ export default function Admin() {
     <>
       <style>{`
         @media print {
-          @page { margin: 0; }
-          body { background: white !important; margin: 0; padding: 0; }
+          @page { 
+            margin: 0; 
+            size: auto;
+          }
+          html, body {
+            height: auto !important;
+            overflow: visible !important;
+            background: white !important;
+          }
+          .print-container {
+            display: block !important;
+            width: 58mm !important;
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+          .no-print {
+            display: none !important;
+          }
         }
       `}</style>
 
-      <div className="min-h-screen bg-background print:hidden">
+      <div className="min-h-screen bg-background no-print">
         <header className="bg-primary text-primary-foreground p-4 shadow-lg">
           <div className="max-w-5xl mx-auto flex items-center gap-4">
             <Button variant="ghost" size="icon" onClick={() => navigate('/')} className="text-primary-foreground hover:bg-primary-foreground/10">
@@ -463,7 +463,6 @@ export default function Admin() {
                 </div>
               </div>
               
-              {/* NOVO: Barra de pesquisa de códigos */}
               {voters.length > 0 && (
                 <div className="relative max-w-sm">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -481,9 +480,7 @@ export default function Admin() {
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 md:gap-3 max-h-[300px] overflow-y-auto p-2 border rounded-lg bg-card">
                   {filteredVoters.map(v => (
                     <div key={v.code} className="flex items-center justify-between bg-muted rounded-md p-1.5 md:p-2 border">
-                      {/* ATUALIZADO: Ícone de ticket removido e espaçamento/texto otimizados para o mobile */}
                       <span className="font-mono font-bold text-base md:text-lg tracking-wider md:tracking-widest pl-1">{v.code}</span>
-                      
                       <div className="flex items-center">
                         <Button variant="ghost" size="icon" className="h-6 w-6 md:h-7 md:w-7 text-muted-foreground hover:text-blue-600" onClick={() => handlePrint([v])} title="Imprimir este">
                           <Printer className="w-3.5 h-3.5" />
@@ -492,7 +489,6 @@ export default function Admin() {
                           <Trash2 className="w-3.5 h-3.5" />
                         </Button>
                       </div>
-
                     </div>
                   ))}
                 </div>
@@ -576,7 +572,6 @@ export default function Admin() {
               <CardTitle className="text-lg">Gerenciar Escrutínios</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              
               {startingScrutinyType && (
                 <div className="p-4 rounded-lg bg-muted border-2 border-gold/30 space-y-6">
                   <div className="border-b border-border pb-4">
@@ -592,13 +587,11 @@ export default function Admin() {
                       );
                     })()}
                   </div>
-
                   <div className="space-y-4 bg-background p-4 rounded-lg border">
                     <h4 className="font-bold text-md flex items-center gap-2">
                       <ShieldCheck className="w-5 h-5 text-gold" />
                       Método de Autenticação da Urna
                     </h4>
-                    
                     <div className="grid sm:grid-cols-2 gap-4">
                       <div 
                         className={`border-2 rounded-xl p-4 cursor-pointer transition-all ${authMode === 'pin' ? 'border-gold bg-gold/5 shadow-md' : 'border-border hover:border-gold/50'}`}
@@ -611,21 +604,17 @@ export default function Admin() {
                           </div>
                         </div>
                         <p className="text-sm text-muted-foreground mb-4">Mesário controla a fila. O eleitor vota e o mesário desbloqueia a urna com uma senha.</p>
-                        
                         {authMode === 'pin' && (
                           <div className="space-y-2 mt-auto" onClick={e => e.stopPropagation()}>
                             <Label>Defina o PIN do Mesário (4 dígitos):</Label>
                             <Input 
-                              type="text" 
-                              maxLength={4} 
-                              value={customPin} 
+                              type="text" maxLength={4} value={customPin} 
                               onChange={e => setCustomPin(e.target.value.replace(/[^0-9]/g, ''))}
                               className="font-mono text-lg font-bold tracking-widest text-center"
                             />
                           </div>
                         )}
                       </div>
-
                       <div 
                         className={`border-2 rounded-xl p-4 cursor-pointer transition-all ${authMode === 'code' ? 'border-blue-600 bg-blue-600/5 shadow-md' : 'border-border hover:border-blue-600/50'}`}
                         onClick={() => setAuthMode('code')}
@@ -645,7 +634,6 @@ export default function Admin() {
                       </div>
                     </div>
                   </div>
-
                   <div className="grid gap-2 sm:grid-cols-2">
                     {state.candidates.filter(c => !((startingScrutinyType === 'presbitero' ? state.electedPresbyters : state.electedDeacons).includes(c.id))).map(c => {
                         const isSelected = selectedParticipants.includes(c.id);
@@ -657,7 +645,6 @@ export default function Admin() {
                         );
                       })}
                   </div>
-                  
                   <div className="flex gap-2 pt-4 border-t border-border">
                     <Button onClick={handleConfirmStartScrutiny} className="bg-gold text-accent-foreground hover:bg-gold-light text-lg px-8"><Play className="w-5 h-5 mr-2" /> Iniciar Votação</Button>
                     <Button variant="ghost" onClick={() => setStartingScrutinyType(null)} className="text-lg">Cancelar</Button>
@@ -710,7 +697,6 @@ export default function Admin() {
                       const sorted = Object.entries(s.votes).filter(([id]) => s.participatingCandidateIds.includes(id)).sort((a, b) => b[1] - a[1]);
                       return (
                         <div key={s.id} className="p-4 rounded-lg border bg-muted/50 text-sm">
-                          
                           <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-3 border-b pb-3 border-muted-foreground/20">
                             <p className="font-semibold text-base">
                               {s.type === 'presbitero' ? 'Presbíteros' : 'Diáconos'} — {s.round}º escrutínio ({s.totalVotes} votos)
@@ -732,7 +718,6 @@ export default function Admin() {
                               )}
                             </div>
                           </div>
-
                           <div className="space-y-2">
                             {sorted.map(([cId, v]) => (
                               <div key={cId} className="flex justify-between items-center">
@@ -756,13 +741,19 @@ export default function Admin() {
         </main>
       </div>
 
+      {/* MÓDULO DE IMPRESSÃO (ULTRA BLINDADO) */}
       {printingVoters.length > 0 && (
-        <div className="hidden print:block w-[58mm] font-sans text-black bg-white">
+        <div className="hidden print-container font-sans text-black bg-white" style={{ position: 'absolute', top: 0, left: 0 }}>
           {printingVoters.map((v, index) => (
             <div 
               key={v.code} 
               className="flex flex-col items-center justify-center p-2 text-center w-full"
-              style={{ pageBreakAfter: index === printingVoters.length - 1 ? 'auto' : 'always', margin: '0 auto' }}
+              style={{ 
+                pageBreakAfter: index === printingVoters.length - 1 ? 'auto' : 'always', 
+                breakInside: 'avoid',
+                margin: '0 auto',
+                paddingBottom: '20px' // Margem segura para o corte físico da impressora
+              }}
             >
               <h2 className="font-bold text-lg leading-tight uppercase">IPB Nova Brasília</h2>
               <p className="text-[10px] font-bold uppercase mt-1">Assembleia Extraordinária</p>
@@ -779,7 +770,7 @@ export default function Admin() {
               <p className="text-[10px] mt-4 font-bold uppercase leading-tight">
                 Acesse o aplicativo da urna e aproxime<br/>este QR Code da câmera.
               </p>
-              <p className="text-[9px] mt-1 text-black/60">
+              <p className="text-[9px] mt-1 text-black/60 pb-4">
                 Uso único e intransferível.
               </p>
             </div>
