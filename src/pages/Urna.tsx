@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useElection } from '@/contexts/ElectionContext';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, CheckCircle2, Vote, Users, Sun, Moon, Loader2 } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, XCircle, Vote, Users, Sun, Moon, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 const playConfirmSound = () => {
@@ -48,6 +48,7 @@ export default function Urna() {
   const [highContrast, setHighContrast] = useState(false);
   
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [voteError, setVoteError] = useState(false);
 
   const currentScrutiny = state.scrutinies.find(s => s.id === state.currentScrutinyId);
   const isOpen = currentScrutiny?.status === 'open';
@@ -94,14 +95,7 @@ export default function Urna() {
       setShowConfirm(false);
       
     } catch (error: any) {
-      toast.error(error.message || 'ERRO: Seu voto NÃO foi computado! Por favor, chame um mesário.', {
-        duration: Infinity, 
-        position: 'top-center',
-        action: {
-          label: 'Entendi, vou tentar de novo',
-          onClick: () => {} 
-        }
-      });
+      setVoteError(true);
       setShowConfirm(false); 
     } finally {
       setIsSubmitting(false); 
@@ -112,6 +106,7 @@ export default function Urna() {
     setSelectedIds([]);
     setHasVoted(false);
     setShowConfirm(false);
+    setVoteError(false); 
   };
 
   if (!isOpen || votingClosed) {
@@ -131,6 +126,33 @@ export default function Urna() {
     );
   }
 
+  // NOVA TELA: Bloqueio Total em caso de Erro
+  if (voteError) {
+    return (
+      <div className="h-screen flex flex-col items-center justify-center bg-primary p-8 overflow-hidden">
+        <div className="text-center max-w-3xl mx-auto bg-destructive/10 p-8 md:p-12 rounded-3xl border-2 border-destructive/30 shadow-2xl">
+          <XCircle className="w-32 h-32 md:w-40 md:h-40 text-destructive mx-auto mb-8 animate-pulse" />
+          <h1 className="text-4xl md:text-6xl font-display font-bold text-destructive mb-6 leading-tight">
+            Voto NÃO Computado!
+          </h1>
+          <p className="text-primary-foreground/90 text-2xl md:text-3xl mb-4 font-bold">
+            Houve uma falha na conexão com o servidor.
+          </p>
+          <p className="text-primary-foreground/70 text-xl md:text-2xl mb-12 bg-primary/50 p-4 rounded-xl border border-primary-foreground/10">
+            Por favor, não saia da cabine e <strong className="text-white text-2xl uppercase block mt-2">chame um mesário agora.</strong>
+          </p>
+          <Button 
+            onClick={() => setVoteError(false)} 
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90 text-xl md:text-2xl px-8 py-8 w-full shadow-xl font-bold tracking-wide"
+          >
+            ENTENDI, VOLTAR PARA A URNA
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // TELA DE SUCESSO
   if (hasVoted) {
     return (
       <div className="h-screen flex flex-col items-center justify-center bg-primary p-8 overflow-hidden">
@@ -142,7 +164,7 @@ export default function Urna() {
           <p className="text-primary-foreground/60 text-2xl mb-12">
             Seu voto foi registrado com segurança no servidor.
           </p>
-          <Button onClick={handleNewVote} className="bg-gold text-accent-foreground hover:bg-gold-light text-2xl px-12 py-8">
+          <Button onClick={handleNewVote} className="bg-gold text-accent-foreground hover:bg-gold-light text-2xl px-12 py-8 font-bold">
             Liberar para o Próximo Eleitor
           </Button>
         </div>
@@ -150,6 +172,27 @@ export default function Urna() {
     );
   }
 
+  // NOVA TELA: Status de Envio (Carregando)
+  if (isSubmitting) {
+    return (
+      <div className="h-screen flex flex-col items-center justify-center bg-primary p-8 overflow-hidden">
+        <div className="text-center max-w-3xl mx-auto bg-primary-foreground/5 p-8 md:p-12 rounded-3xl border-2 border-primary-foreground/10 shadow-2xl">
+          <Loader2 className="w-32 h-32 md:w-40 md:h-40 text-gold mx-auto mb-8 animate-spin" />
+          <h1 className="text-4xl md:text-6xl font-display font-bold text-primary-foreground mb-6 leading-tight">
+            Aguarde...
+          </h1>
+          <p className="text-primary-foreground/90 text-2xl md:text-3xl mb-4 font-bold">
+            Enviando seu voto para o servidor.
+          </p>
+          <p className="text-primary-foreground/70 text-xl md:text-2xl mt-4">
+            Não feche o aplicativo e não desligue a tela.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // TELA PRINCIPAL DA URNA
   return (
     <div className="h-screen bg-primary flex flex-col overflow-hidden relative">
       <header className="shrink-0 p-3 md:p-4 border-b border-primary-foreground/10">
@@ -208,12 +251,10 @@ export default function Urna() {
               <button
                 key={c.id}
                 onClick={() => toggleCandidate(c.id)}
-                disabled={isSubmitting} 
                 className={`
                   w-[45%] sm:w-[30%] md:w-[22%] lg:w-[18%] max-w-[220px] shrink-0
                   relative p-3 md:p-4 rounded-xl transition-all duration-200 text-center flex flex-col items-center justify-center
                   ${isSelected ? cardSelectedStyle : cardBaseStyle}
-                  ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}
                 `}
               >
                 <div className={`w-16 h-16 md:w-24 md:h-24 mb-3 rounded-full overflow-hidden shrink-0 shadow-lg ${iconBgStyle}`}>
@@ -263,26 +304,22 @@ export default function Urna() {
           </div>
 
           <div className="flex items-center justify-end gap-3 w-full sm:w-auto shrink-0">
-            {showConfirm && !isSubmitting && (
+            {showConfirm && (
               <Button variant="ghost" onClick={() => setShowConfirm(false)} className="text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground text-lg md:text-xl py-6 md:py-8 px-4 md:px-6">
                 Corrigir
               </Button>
             )}
             
             <Button
-              disabled={isSubmitting}
               onClick={showConfirm ? handleConfirm : () => setShowConfirm(true)}
               className={`
                 font-bold text-xl md:text-3xl py-6 md:py-8 shadow-xl transition-all flex-1 sm:flex-none
                 w-full sm:w-[260px] md:w-[320px] 
-                ${isSubmitting ? 'bg-primary-foreground/20 text-primary-foreground cursor-wait' :
-                  showConfirm ? 'bg-success text-success-foreground hover:bg-success/90 animate-pulse-ring' : 
+                ${showConfirm ? 'bg-success text-success-foreground hover:bg-success/90 animate-pulse-ring' : 
                   selectedIds.length === 0 ? 'bg-secondary text-secondary-foreground hover:bg-secondary/80' : 'bg-gold text-accent-foreground hover:bg-gold-light'}
               `}
             >
-              {isSubmitting ? (
-                <><Loader2 className="w-6 h-6 md:w-8 md:h-8 mr-2 animate-spin" /> SALVANDO...</>
-              ) : showConfirm ? (
+              {showConfirm ? (
                 'CONFIRMAR'
               ) : selectedIds.length === 0 ? (
                 <><Vote className="w-6 h-6 md:w-8 md:h-8 mr-2" /> VOTAR</>
@@ -293,7 +330,7 @@ export default function Urna() {
           </div>
 
         </div>
-        {showConfirm && !isSubmitting && (
+        {showConfirm && (
           <p className="text-primary-foreground font-bold text-center mt-3 sm:hidden">
             {selectedIds.length === 0 ? `Confirmar ${blankCount} BRANCOS?` : `Confirmar ${selectedIds.length} candidato(s)?`}
           </p>
