@@ -38,7 +38,7 @@ export default function Admin() {
   const [voterCountToGenerate, setVoterCountToGenerate] = useState<number | string>(1);
   const [printingVoters, setPrintingVoters] = useState<Voter[]>([]);
 
-  // NOVO: Estados para a configuração de Segurança do Turno
+  // Estados para a configuração de Segurança do Turno
   const [authMode, setAuthMode] = useState<'pin' | 'code'>('pin');
   const [customPin, setCustomPin] = useState('4321');
 
@@ -150,11 +150,12 @@ export default function Admin() {
 
     setSelectedParticipants(initialSelected);
     setStartingScrutinyType(type);
-    setAuthMode('pin'); // Reseta a escolha de segurança
+    setAuthMode('pin'); 
     setCustomPin('4321');
   };
 
-  const handleConfirmStartScrutiny = () => {
+  // FUNÇÃO CORRIGIDA COM AWAIT E TRATAMENTO DE ERRO
+  const handleConfirmStartScrutiny = async () => {
     if (!startingScrutinyType) return;
     if (selectedParticipants.length === 0) {
       toast.error('Selecione pelo menos um candidato');
@@ -171,20 +172,24 @@ export default function Admin() {
 
     const existingRounds = state.scrutinies.filter(s => s.type === startingScrutinyType).length;
     
-    dispatch({
-      type: 'START_SCRUTINY',
-      payload: { 
-        type: startingScrutinyType, 
-        round: existingRounds + 1, 
-        participatingCandidateIds: selectedParticipants,
-        authMode: authMode,
-        pin: authMode === 'pin' ? customPin : undefined
-      },
-    });
-    
-    toast.success(`Votação iniciada no modo: ${authMode === 'pin' ? 'Tablet/Mesário' : 'Celular (QR Code)'}`);
-    setStartingScrutinyType(null);
-    setSelectedParticipants([]);
+    try {
+      await dispatch({
+        type: 'START_SCRUTINY',
+        payload: { 
+          type: startingScrutinyType, 
+          round: existingRounds + 1, 
+          participatingCandidateIds: selectedParticipants,
+          authMode: authMode,
+          pin: authMode === 'pin' ? customPin : ""
+        },
+      });
+      
+      toast.success(`Votação iniciada no modo: ${authMode === 'pin' ? 'Tablet/Mesário' : 'Celular (QR Code)'}`);
+      setStartingScrutinyType(null);
+      setSelectedParticipants([]);
+    } catch (error: any) {
+      toast.error("Falha ao iniciar escrutínio no servidor: " + error.message);
+    }
   };
 
   const handleCloseScrutiny = () => {
@@ -489,7 +494,6 @@ export default function Admin() {
             </CardHeader>
             <CardContent className="space-y-4">
               
-              {/* NOVO: TELA DE CONFIGURAÇÃO DE SEGURANÇA E INÍCIO DO ESCRUTÍNIO */}
               {startingScrutinyType && (
                 <div className="p-4 rounded-lg bg-muted border-2 border-gold/30 space-y-6">
                   <div className="border-b border-border pb-4">
@@ -513,7 +517,6 @@ export default function Admin() {
                     </h4>
                     
                     <div className="grid sm:grid-cols-2 gap-4">
-                      {/* Opção 1: Tablet / PIN */}
                       <div 
                         className={`border-2 rounded-xl p-4 cursor-pointer transition-all ${authMode === 'pin' ? 'border-gold bg-gold/5 shadow-md' : 'border-border hover:border-gold/50'}`}
                         onClick={() => setAuthMode('pin')}
@@ -540,7 +543,6 @@ export default function Admin() {
                         )}
                       </div>
 
-                      {/* Opção 2: QR Code / Celular */}
                       <div 
                         className={`border-2 rounded-xl p-4 cursor-pointer transition-all ${authMode === 'code' ? 'border-blue-600 bg-blue-600/5 shadow-md' : 'border-border hover:border-blue-600/50'}`}
                         onClick={() => setAuthMode('code')}
