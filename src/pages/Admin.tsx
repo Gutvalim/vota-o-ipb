@@ -46,7 +46,7 @@ function SyncInput({ value, onChange, ...props }: any) {
 }
 
 export default function Admin() {
-  const { state, dispatch, resolveScrutinyResults } = useElection();
+  const { state, dispatch } = useElection();
   const { currentUser, users, logout, approveUser, rejectUser } = useAuth();
   const navigate = useNavigate();
 
@@ -57,19 +57,13 @@ export default function Admin() {
   const [selectedParticipants, setSelectedParticipants] = useState<string[]>([]);
 
   const [voterCountToGenerate, setVoterCountToGenerate] = useState<number | string>(1);
+  
+  // A lista de impressão não será mais limpa automaticamente para evitar bugs no mobile
   const [printingVoters, setPrintingVoters] = useState<Voter[]>([]);
   const [searchVoter, setSearchVoter] = useState('');
 
   const [authMode, setAuthMode] = useState<'pin' | 'code'>('pin');
   const [customPin, setCustomPin] = useState('4321');
-
-  useEffect(() => {
-    const handleAfterPrint = () => {
-      setPrintingVoters([]);
-    };
-    window.addEventListener('afterprint', handleAfterPrint);
-    return () => window.removeEventListener('afterprint', handleAfterPrint);
-  }, []);
 
   if (!currentUser) {
     navigate('/login');
@@ -295,9 +289,11 @@ export default function Admin() {
   const handlePrint = (votersToPrint: Voter[]) => {
     if (votersToPrint.length === 0) return;
     setPrintingVoters(votersToPrint);
+    
+    // Tempo suficiente para o DOM injetar o QR Code na área oculta antes de imprimir
     setTimeout(() => {
       window.print();
-    }, 800);
+    }, 600);
   };
 
   const sortedVoters = [...voters].sort((a, b) => b.createdAt - a.createdAt);
@@ -306,9 +302,24 @@ export default function Admin() {
   return (
     <>
       <style>{`
-        @media screen { .print-container { display: none; } }
+        /* Oculta completamente da tela, mas mantém o HTML carregado para o mobile capturar */
+        @media screen { 
+          .print-container { 
+            position: fixed;
+            left: -9999px;
+            top: -9999px;
+            opacity: 0;
+            pointer-events: none;
+            z-index: -1;
+          } 
+        }
+        
+        /* Regras estritas para quando a janela de impressão abrir */
         @media print {
-          @page { margin: 0; size: 58mm auto; }
+          @page { 
+            margin: 0; 
+            size: 58mm auto; 
+          }
           html, body {
             height: auto !important;
             overflow: visible !important;
@@ -316,27 +327,29 @@ export default function Admin() {
             margin: 0 !important;
             padding: 0 !important;
           }
-          .no-print { display: none !important; }
+          .no-print { 
+            display: none !important; 
+          }
           .print-container {
+            position: relative !important;
+            left: 0 !important;
+            top: 0 !important;
+            opacity: 1 !important;
             display: block !important;
             width: 58mm !important;
-            margin: 0 !important;
+            margin: 0 auto !important;
             padding: 0 !important;
           }
           .ticket {
             width: 58mm !important;
             padding: 5mm !important;
             text-align: center;
-            page-break-after: always;
             box-sizing: border-box;
-          }
-          .ticket:last-child {
-            page-break-after: auto;
           }
         }
       `}</style>
 
-      <div className="min-h-screen bg-background no-print">
+      <div className="min-h-screen bg-background no-print pb-10">
         <header className="bg-primary text-primary-foreground p-4 shadow-lg">
           <div className="max-w-5xl mx-auto flex items-center gap-4">
             <Button variant="ghost" size="icon" onClick={() => navigate('/')} className="text-primary-foreground hover:bg-primary-foreground/10">
@@ -749,7 +762,7 @@ export default function Admin() {
         </main>
       </div>
 
-      {/* MÓDULO DE IMPRESSÃO - CORRIGIDO PARA MOBILE */}
+      {/* MÓDULO DE IMPRESSÃO (BLINDADO CONTRA BUG DO MOBILE) */}
       {printingVoters.length > 0 && (
         <div className="print-container font-sans text-black bg-white">
           {printingVoters.map((v, index) => (
@@ -757,10 +770,6 @@ export default function Admin() {
               key={v.code} 
               className="ticket"
               style={{ 
-                width: '58mm',
-                padding: '5mm',
-                textAlign: 'center',
-                boxSizing: 'border-box',
                 pageBreakAfter: index === printingVoters.length - 1 ? 'auto' : 'always',
                 breakInside: 'avoid'
               }}
