@@ -57,13 +57,22 @@ export default function Admin() {
   const [selectedParticipants, setSelectedParticipants] = useState<string[]>([]);
 
   const [voterCountToGenerate, setVoterCountToGenerate] = useState<number | string>(1);
-  
-  // A lista de impressão não será mais limpa automaticamente para evitar bugs no mobile
   const [printingVoters, setPrintingVoters] = useState<Voter[]>([]);
   const [searchVoter, setSearchVoter] = useState('');
+  
+  // NOVO: Controle do Modal de Faltantes
+  const [showPendingModal, setShowPendingModal] = useState(false);
 
   const [authMode, setAuthMode] = useState<'pin' | 'code'>('pin');
   const [customPin, setCustomPin] = useState('4321');
+
+  useEffect(() => {
+    const handleAfterPrint = () => {
+      setPrintingVoters([]);
+    };
+    window.addEventListener('afterprint', handleAfterPrint);
+    return () => window.removeEventListener('afterprint', handleAfterPrint);
+  }, []);
 
   if (!currentUser) {
     navigate('/login');
@@ -74,6 +83,8 @@ export default function Admin() {
   const isVotingOpen = currentScrutiny?.status === 'open';
   const pendingUsers = users.filter(u => !u.approved);
   const voters = state.voters || [];
+
+  const votedCodesList = currentScrutiny?.votedCodes || [];
 
   const handleSaveElection = (field: string, value: string | number) => {
     dispatch({ type: 'SET_ELECTION', payload: { [field]: value } });
@@ -208,6 +219,7 @@ export default function Admin() {
     if (!state.currentScrutinyId) return;
     dispatch({ type: 'CLOSE_SCRUTINY', payload: state.currentScrutinyId });
     toast.success('Votação encerrada');
+    setShowPendingModal(false);
   };
 
   const handleRestartScrutiny = (scrutinyId: string) => {
@@ -290,7 +302,6 @@ export default function Admin() {
     if (votersToPrint.length === 0) return;
     setPrintingVoters(votersToPrint);
     
-    // Tempo suficiente para o DOM injetar o QR Code na área oculta antes de imprimir
     setTimeout(() => {
       window.print();
     }, 600);
@@ -302,7 +313,6 @@ export default function Admin() {
   return (
     <>
       <style>{`
-        /* Oculta completamente da tela, mas mantém o HTML carregado para o mobile capturar */
         @media screen { 
           .print-container { 
             position: fixed;
@@ -313,8 +323,6 @@ export default function Admin() {
             z-index: -1;
           } 
         }
-        
-        /* Regras estritas para quando a janela de impressão abrir */
         @media print {
           @page { 
             margin: 0; 
@@ -327,9 +335,7 @@ export default function Admin() {
             margin: 0 !important;
             padding: 0 !important;
           }
-          .no-print { 
-            display: none !important; 
-          }
+          .no-print { display: none !important; }
           .print-container {
             position: relative !important;
             left: 0 !important;
@@ -459,64 +465,105 @@ export default function Admin() {
               </p>
             </CardHeader>
             <CardContent className="pt-6 space-y-6">
-              <div className="flex flex-col sm:flex-row items-end gap-3 bg-muted/50 p-4 rounded-xl border border-border/50">
-                <div className="w-full sm:w-48">
-                  <Label>Gerar nova quantidade:</Label>
-                  <Input 
-                    type="number" 
-                    min={1} max={500}
-                    value={voterCountToGenerate} 
-                    onChange={e => setVoterCountToGenerate(e.target.value)} 
-                    className="mt-1"
-                  />
-                </div>
-                <Button onClick={handleGenerateVoters} className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white">
-                  <Plus className="w-4 h-4 mr-2" /> Gerar Códigos
-                </Button>
-                <div className="flex-1"></div>
-                <div className="flex gap-2 w-full sm:w-auto mt-4 sm:mt-0">
-                  <Button variant="outline" onClick={() => handlePrint(voters)} disabled={voters.length === 0} className="flex-1 sm:flex-none border-blue-600 text-blue-600 hover:bg-blue-50">
-                    <Printer className="w-4 h-4 mr-2" /> Imprimir Todos
+              
+              <div className="flex flex-col sm:flex-row items-start sm:items-end gap-3 bg-muted/50 p-4 rounded-xl border border-border/50">
+                <div className="flex items-end gap-2 w-full sm:w-auto">
+                  <div className="flex-1 sm:w-48">
+                    <Label>Gerar nova quantidade:</Label>
+                    <Input 
+                      type="number" 
+                      min={1} max={500}
+                      value={voterCountToGenerate} 
+                      onChange={e => setVoterCountToGenerate(e.target.value)} 
+                      className="mt-1"
+                    />
+                  </div>
+                  <Button onClick={handleGenerateVoters} className="bg-blue-600 hover:bg-blue-700 text-white">
+                    <Plus className="w-4 h-4 md:mr-2" /> <span className="hidden md:inline">Gerar</span>
                   </Button>
-                  <Button variant="destructive" onClick={handleClearVoters} disabled={voters.length === 0 || isVotingOpen} className="flex-none" title="Apagar Todos os Códigos">
-                    <Trash2 className="w-4 h-4" /> Excluir Todos
+                </div>
+                
+                <div className="flex-1 hidden sm:block"></div>
+                
+                {/* CORREÇÃO DO LAYOUT MOBILE: Grid Cols 2 para não vazar a caixa */}
+                <div className="grid grid-cols-2 sm:flex gap-2 w-full sm:w-auto mt-2 sm:mt-0">
+                  <Button variant="outline" onClick={() => handlePrint(voters)} disabled={voters.length === 0} className="w-full border-blue-600 text-blue-600 hover:bg-blue-50 px-2 sm:px-4 text-xs sm:text-sm">
+                    <Printer className="w-4 h-4 mr-1 md:mr-2" /> Imprimir<span className="hidden sm:inline">&nbsp;Todos</span>
+                  </Button>
+                  <Button variant="destructive" onClick={handleClearVoters} disabled={voters.length === 0 || isVotingOpen} className="w-full px-2 sm:px-4 text-xs sm:text-sm">
+                    <Trash2 className="w-4 h-4 mr-1 md:mr-2" /> Excluir<span className="hidden sm:inline">&nbsp;Todos</span>
                   </Button>
                 </div>
               </div>
               
               {voters.length > 0 && (
-                <div className="relative max-w-sm">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input 
-                    placeholder="Pesquisar código (ex: 123456)..." 
-                    value={searchVoter}
-                    onChange={(e) => setSearchVoter(e.target.value.replace(/[^0-9]/g, ''))}
-                    maxLength={6}
-                    className="pl-9 bg-background"
-                  />
+                <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+                  <div className="relative w-full max-w-sm">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input 
+                      placeholder="Pesquisar código (ex: 123456)..." 
+                      value={searchVoter}
+                      onChange={(e) => setSearchVoter(e.target.value.replace(/[^0-9]/g, ''))}
+                      maxLength={6}
+                      className="pl-9 bg-background"
+                    />
+                  </div>
+                  
+                  {/* BOTAO ESTÁTICO DE VER FALTANTES */}
+                  {isVotingOpen && currentScrutiny?.authMode === 'code' && (
+                    <Button 
+                      variant="secondary" 
+                      onClick={() => setShowPendingModal(true)} 
+                      className="w-full sm:w-auto bg-yellow-500/20 text-yellow-700 hover:bg-yellow-500/30 border border-yellow-500/50"
+                    >
+                      <Users className="w-4 h-4 mr-2" /> Faltam Votar ({voters.length - votedCodesList.length})
+                    </Button>
+                  )}
                 </div>
               )}
 
               {filteredVoters.length > 0 ? (
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 md:gap-3 max-h-[300px] overflow-y-auto p-2 border rounded-lg bg-card">
-                  {filteredVoters.map(v => (
-                    <div key={v.code} className="flex items-center justify-between bg-muted rounded-md p-1.5 md:p-2 border">
-                      <span className="font-mono font-bold text-base md:text-lg tracking-wider md:tracking-widest pl-1">{v.code}</span>
-                      <div className="flex items-center">
-                        <Button variant="ghost" size="icon" className="h-6 w-6 md:h-7 md:w-7 text-muted-foreground hover:text-blue-600" onClick={() => handlePrint([v])} title="Imprimir este">
-                          <Printer className="w-3.5 h-3.5" />
-                        </Button>
-                        <Button variant="ghost" size="icon" className="h-6 w-6 md:h-7 md:w-7 text-muted-foreground hover:text-destructive" onClick={() => handleDeleteSingleVoter(v.code)} title="Excluir este">
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </Button>
+                  {filteredVoters.map(v => {
+                    const hasVotedCurrentRound = isVotingOpen && currentScrutiny?.authMode === 'code' && votedCodesList.includes(v.code);
+                    
+                    return (
+                      <div 
+                        key={v.code} 
+                        className={`flex items-center justify-between p-1.5 md:p-2 border rounded-md transition-colors ${hasVotedCurrentRound ? 'bg-success/10 border-success/30' : 'bg-muted'}`}
+                      >
+                        <div className="flex flex-col">
+                          <span className={`font-mono font-bold text-base md:text-lg tracking-wider md:tracking-widest pl-1 ${hasVotedCurrentRound ? 'text-success-foreground' : ''}`}>
+                            {v.code}
+                          </span>
+                          
+                          {isVotingOpen && currentScrutiny?.authMode === 'code' && (
+                            <div className="pl-1 mt-0.5">
+                              {hasVotedCurrentRound ? (
+                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-success/20 text-success uppercase tracking-wider">✓ Votou</span>
+                              ) : (
+                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-700 uppercase tracking-wider">Pendente</span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="flex items-center">
+                          <Button variant="ghost" size="icon" className="h-6 w-6 md:h-7 md:w-7 text-muted-foreground hover:text-blue-600" onClick={() => handlePrint([v])} title="Imprimir este">
+                            <Printer className="w-3.5 h-3.5" />
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-6 w-6 md:h-7 md:w-7 text-muted-foreground hover:text-destructive" onClick={() => handleDeleteSingleVoter(v.code)} title="Excluir este">
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               ) : (
                 voters.length > 0 && (
                   <p className="text-center text-muted-foreground py-4 border rounded-lg bg-muted/20">
-                    Nenhum código encontrado com "{searchVoter}".
+                    Nenhum código encontrado.
                   </p>
                 )
               )}
@@ -762,7 +809,43 @@ export default function Admin() {
         </main>
       </div>
 
-      {/* MÓDULO DE IMPRESSÃO (BLINDADO CONTRA BUG DO MOBILE) */}
+      {/* JANELA DE CÓDIGOS PENDENTES (SÓ APARECE QUANDO CLICADA) */}
+      {showPendingModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-[100] no-print">
+          <Card className="w-full max-w-md shadow-2xl flex flex-col max-h-[85vh]">
+            <CardHeader className="shrink-0 border-b pb-4">
+              <CardTitle className="text-xl flex items-center gap-2">
+                <Users className="w-5 h-5 text-yellow-600" /> Faltam Votar
+              </CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Estes códigos ainda não depositaram o voto na urna no turno atual.
+              </p>
+            </CardHeader>
+            <CardContent className="overflow-y-auto flex-1 p-4 bg-muted/30">
+              <div className="grid grid-cols-3 gap-2">
+                {voters.filter(v => !votedCodesList.includes(v.code)).map(v => (
+                  <div key={v.code} className="p-2 bg-white border border-yellow-500/30 rounded-md text-center font-mono font-bold text-sm shadow-sm text-yellow-900">
+                    {v.code}
+                  </div>
+                ))}
+                {voters.filter(v => !votedCodesList.includes(v.code)).length === 0 && (
+                  <div className="col-span-3 text-center text-muted-foreground py-8">
+                    <CheckCircle2 className="w-12 h-12 text-success mx-auto mb-2 opacity-50" />
+                    Todos os eleitores já votaram!
+                  </div>
+                )}
+              </div>
+            </CardContent>
+            <div className="p-4 border-t shrink-0">
+              <Button className="w-full bg-navy" onClick={() => setShowPendingModal(false)}>
+                Fechar Janela
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* MÓDULO DE IMPRESSÃO (BLINDADO) */}
       {printingVoters.length > 0 && (
         <div className="print-container font-sans text-black bg-white">
           {printingVoters.map((v, index) => (
