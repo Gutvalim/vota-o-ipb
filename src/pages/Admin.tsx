@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useElection, Candidate, CandidateRole, ScrutinyType, Voter } from '@/contexts/ElectionContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
@@ -23,6 +23,29 @@ const ROLE_LABELS: Record<CandidateRole, string> = {
   membro: 'Membro',
 };
 
+// NOVO: Caixa de texto inteligente para evitar o "bug de digitação" do Firebase
+function SyncInput({ value, onChange, ...props }: any) {
+  const [localValue, setLocalValue] = useState(value);
+  const [isFocused, setIsFocused] = useState(false);
+
+  useEffect(() => {
+    if (!isFocused) setLocalValue(value);
+  }, [value, isFocused]);
+
+  return (
+    <Input
+      {...props}
+      value={isFocused ? localValue : value}
+      onFocus={() => setIsFocused(true)}
+      onChange={(e) => setLocalValue(e.target.value)}
+      onBlur={() => {
+        setIsFocused(false);
+        if (localValue !== value) onChange(localValue);
+      }}
+    />
+  );
+}
+
 export default function Admin() {
   const { state, dispatch, resolveScrutinyResults } = useElection();
   const { currentUser, users, logout, approveUser, rejectUser } = useAuth();
@@ -34,11 +57,9 @@ export default function Admin() {
   const [startingScrutinyType, setStartingScrutinyType] = useState<ScrutinyType | null>(null);
   const [selectedParticipants, setSelectedParticipants] = useState<string[]>([]);
 
-  // Estados para Eleitores
   const [voterCountToGenerate, setVoterCountToGenerate] = useState<number | string>(1);
   const [printingVoters, setPrintingVoters] = useState<Voter[]>([]);
 
-  // Estados para a configuração de Segurança do Turno
   const [authMode, setAuthMode] = useState<'pin' | 'code'>('pin');
   const [customPin, setCustomPin] = useState('4321');
 
@@ -154,7 +175,6 @@ export default function Admin() {
     setCustomPin('4321');
   };
 
-  // FUNÇÃO CORRIGIDA COM AWAIT E TRATAMENTO DE ERRO
   const handleConfirmStartScrutiny = async () => {
     if (!startingScrutinyType) return;
     if (selectedParticipants.length === 0) {
@@ -277,6 +297,9 @@ export default function Admin() {
     }, 300);
   };
 
+  // NOVO: Ordena a lista de eleitores para o último gerado aparecer em cima
+  const sortedVoters = [...voters].sort((a, b) => b.createdAt - a.createdAt);
+
   return (
     <>
       <style>{`
@@ -350,6 +373,7 @@ export default function Admin() {
             </Card>
           )}
 
+          {/* ATUALIZADO: Uso do SyncInput para evitar embaralhamento de letras */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-lg">
@@ -357,11 +381,26 @@ export default function Admin() {
               </CardTitle>
             </CardHeader>
             <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              <div><Label>Título da Eleição</Label><Input value={state.title} onChange={e => handleSaveElection('title', e.target.value)} /></div>
-              <div><Label>Data</Label><Input type="date" value={state.date} onChange={e => handleSaveElection('date', e.target.value)} /></div>
-              <div><Label>Meta de Votantes (Opcional)</Label><Input type="number" min={0} value={state.voterGoal || ''} onChange={e => handleSaveElection('voterGoal', parseInt(e.target.value) || 0)} /></div>
-              <div><Label>Vagas Presbíteros</Label><Input type="number" min={0} value={state.presbyterSlots || ''} onChange={e => handleSaveElection('presbyterSlots', parseInt(e.target.value) || 0)} /></div>
-              <div><Label>Vagas Diáconos</Label><Input type="number" min={0} value={state.deaconSlots || ''} onChange={e => handleSaveElection('deaconSlots', parseInt(e.target.value) || 0)} /></div>
+              <div>
+                <Label>Título da Eleição</Label>
+                <SyncInput value={state.title || ''} onChange={(val: string) => handleSaveElection('title', val)} />
+              </div>
+              <div>
+                <Label>Data</Label>
+                <SyncInput type="date" value={state.date || ''} onChange={(val: string) => handleSaveElection('date', val)} />
+              </div>
+              <div>
+                <Label>Meta de Votantes (Opcional)</Label>
+                <SyncInput type="number" min={0} value={state.voterGoal?.toString() || ''} onChange={(val: string) => handleSaveElection('voterGoal', parseInt(val) || 0)} />
+              </div>
+              <div>
+                <Label>Vagas Presbíteros</Label>
+                <SyncInput type="number" min={0} value={state.presbyterSlots?.toString() || ''} onChange={(val: string) => handleSaveElection('presbyterSlots', parseInt(val) || 0)} />
+              </div>
+              <div>
+                <Label>Vagas Diáconos</Label>
+                <SyncInput type="number" min={0} value={state.deaconSlots?.toString() || ''} onChange={(val: string) => handleSaveElection('deaconSlots', parseInt(val) || 0)} />
+              </div>
             </CardContent>
           </Card>
 
@@ -401,13 +440,14 @@ export default function Admin() {
                     <Printer className="w-4 h-4 mr-2" /> Imprimir Todos
                   </Button>
                   <Button variant="destructive" onClick={handleClearVoters} disabled={voters.length === 0 || isVotingOpen} className="flex-none" title="Apagar Todos os Códigos">
-                    <Trash2 className="w-4 h-4" />
+                    <Trash2 className="w-4 h-4" /> Excluir Todos
                   </Button>
                 </div>
               </div>
-              {voters.length > 0 && (
+              {/* ATUALIZADO: Usando a lista ordenada para o último gerado ficar no topo */}
+              {sortedVoters.length > 0 && (
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 max-h-[300px] overflow-y-auto p-2 border rounded-lg bg-card">
-                  {voters.map(v => (
+                  {sortedVoters.map(v => (
                     <div key={v.code} className="flex items-center justify-between bg-muted rounded-md p-2 border">
                       <div className="flex items-center gap-2">
                         <Ticket className="w-4 h-4 text-muted-foreground" />
@@ -694,10 +734,10 @@ export default function Admin() {
               </div>
               
               <p className="text-[10px] mt-4 font-bold uppercase leading-tight">
-                Acesse o app da urna e aproxime<br/>este QR Code da câmera.
+                Aceda à aplicação da urna e aproxime<br/>este QR Code da câmara.
               </p>
               <p className="text-[9px] mt-1 text-black/60">
-                Uso único e intransferível.
+                Uso único e intransmissível.
               </p>
             </div>
           ))}
