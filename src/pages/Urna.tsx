@@ -4,7 +4,8 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, CheckCircle2, XCircle, Vote, Users, Sun, Moon, Loader2, Lock, Delete, Camera, KeyRound } from 'lucide-react';
 import { toast } from 'sonner';
-import { Html5QrcodeScanner } from 'html5-qrcode';
+// ATUALIZAÇÃO: Usando o motor puro da câmera em vez do Scanner pré-montado
+import { Html5Qrcode } from 'html5-qrcode';
 
 const playConfirmSound = () => {
   try {
@@ -53,7 +54,7 @@ export default function Urna() {
   const [showPinPad, setShowPinPad] = useState(false);
   const [pinInput, setPinInput] = useState('');
 
-  // Estados de Autenticação do Eleitor (Para o modo Celular/QR Code)
+  // Estados de Autenticação do Eleitor
   const [authenticatedCode, setAuthenticatedCode] = useState<string | null>(null);
   const [authInput, setAuthInput] = useState('');
   const [isScanning, setIsScanning] = useState(false);
@@ -62,7 +63,6 @@ export default function Urna() {
   const isOpen = currentScrutiny?.status === 'open';
   const votingClosed = currentScrutiny && currentScrutiny.status === 'closed';
   
-  // Define qual é o modo de autenticação deste turno (se for um turno antigo, assume PIN por padrão)
   const authMode = currentScrutiny?.authMode || 'pin';
   const requiredPin = currentScrutiny?.pin || '4321';
 
@@ -84,45 +84,61 @@ export default function Urna() {
     setIsScanning(false);
   }
 
-  // Efeito para gerenciar a câmera do QR Code
+  // ATUALIZAÇÃO: Câmera abre direto na lente traseira (environment)
   useEffect(() => {
-    if (isScanning) {
-      const scanner = new Html5QrcodeScanner(
-        "qr-reader",
-        { fps: 10, qrbox: { width: 250, height: 250 }, rememberLastUsedCamera: true },
-        false
-      );
-      
-      scanner.render((decodedText) => {
-        scanner.clear();
-        setIsScanning(false);
-        handleValidateVoterCode(decodedText);
-      }, undefined);
+    let html5QrCode: Html5Qrcode;
 
-      return () => {
-        scanner.clear().catch(e => console.error("Erro ao limpar scanner", e));
-      };
+    if (isScanning) {
+      html5QrCode = new Html5Qrcode("qr-reader");
+      
+      html5QrCode.start(
+        { facingMode: "environment" }, // Força a câmera traseira
+        {
+          fps: 10,
+          qrbox: { width: 250, height: 250 }
+        },
+        (decodedText) => {
+          if (html5QrCode.isScanning) {
+            html5QrCode.stop().then(() => {
+              html5QrCode.clear();
+              setIsScanning(false);
+              handleValidateVoterCode(decodedText);
+            }).catch(e => console.error(e));
+          }
+        },
+        (errorMessage) => {
+          // Ignora erros de frame contínuo
+        }
+      ).catch((err) => {
+        console.error(err);
+        toast.error("Erro ao acessar a câmera. Verifique as permissões do navegador.");
+        setIsScanning(false);
+      });
     }
+
+    return () => {
+      if (html5QrCode && html5QrCode.isScanning) {
+        html5QrCode.stop().then(() => html5QrCode.clear()).catch(e => console.error(e));
+      }
+    };
   }, [isScanning]);
 
   const handleValidateVoterCode = (codeToTest: string) => {
     const cleanCode = codeToTest.trim();
     if (!cleanCode) return;
 
-    // Verifica se o código existe no banco
     const isValidCode = state.voters?.some(v => v.code === cleanCode);
     if (!isValidCode) {
       toast.error('Código inválido ou inexistente.', { position: 'top-center' });
       return;
     }
 
-    // Verifica se o código JÁ votou neste escrutínio
     if (currentScrutiny?.votedCodes?.includes(cleanCode)) {
-      toast.error('VOTO NEGADO: Este código já foi utilizado neste turno.', { position: 'top-center', duration: 5000 });
+      // ATUALIZAÇÃO: Mudança da palavra "turno" para "escrutínio"
+      toast.error('VOTO NEGADO: Este código já foi utilizado neste escrutínio.', { position: 'top-center', duration: 5000 });
       return;
     }
 
-    // Se passou, autentica o usuário e libera a urna
     setAuthenticatedCode(cleanCode);
     toast.success('Código validado! Voto liberado.', { position: 'top-center' });
   };
@@ -154,7 +170,6 @@ export default function Urna() {
     });
   };
 
-  // FUNÇÃO CORRIGIDA COM AWAIT E TRATAMENTO DA VARIÁVEL VAZIA
   const handleConfirm = async () => {
     if (!currentScrutiny) return;
     
@@ -166,7 +181,6 @@ export default function Urna() {
         payload: { 
           scrutinyId: currentScrutiny.id, 
           candidateIds: selectedIds,
-          // Correção: Envia string vazia em vez de undefined se não houver código
           voterCode: authenticatedCode || ""
         } 
       });
@@ -250,8 +264,8 @@ export default function Urna() {
 
             {isScanning ? (
               <div className="w-full mb-6">
-                <div id="qr-reader" className="w-full overflow-hidden rounded-xl border-2 border-gold/50 bg-black"></div>
-                <Button variant="ghost" onClick={() => setIsScanning(false)} className="mt-4 text-primary-foreground w-full">
+                <div id="qr-reader" className="w-full overflow-hidden rounded-xl border-2 border-gold/50 bg-black min-h-[250px]"></div>
+                <Button variant="ghost" onClick={() => setIsScanning(false)} className="mt-4 text-primary-foreground w-full py-6">
                   Cancelar Leitura da Câmera
                 </Button>
               </div>
@@ -280,13 +294,14 @@ export default function Urna() {
                   <div className="flex-1 h-px bg-primary-foreground/20"></div>
                 </div>
 
+                {/* ATUALIZAÇÃO: Botão da Câmera ajustado para não vazar texto em telas pequenas */}
                 <Button 
                   onClick={() => setIsScanning(true)}
                   variant="outline"
-                  className="w-full border-blue-500 text-blue-500 hover:bg-blue-500/10 hover:text-blue-400 text-lg py-6 font-bold"
+                  className="w-full border-blue-500 text-blue-500 hover:bg-blue-500/10 hover:text-blue-400 text-base sm:text-lg py-6 font-bold h-auto whitespace-normal flex items-center justify-center"
                 >
-                  <Camera className="w-6 h-6 mr-2" />
-                  LER QR CODE COM A CÂMERA
+                  <Camera className="w-6 h-6 mr-2 shrink-0" />
+                  <span>LER QR CODE COM A CÂMERA</span>
                 </Button>
               </div>
             )}
@@ -335,7 +350,6 @@ export default function Urna() {
     return (
       <div className="h-screen flex flex-col items-center justify-center bg-primary p-4 overflow-hidden">
         
-        {/* Se for modo código, apenas agradece. O eleitor não pode resetar a urna. */}
         {authMode === 'code' ? (
            <div className="text-center w-full max-w-md md:max-w-2xl px-4">
             <CheckCircle2 className="w-24 h-24 md:w-32 md:h-32 text-success mx-auto mb-6 shrink-0" />
@@ -351,7 +365,6 @@ export default function Urna() {
             </div>
           </div>
         ) : !showPinPad ? (
-          // Tela Verde Padrão do Mesário
           <div className="text-center w-full max-w-md md:max-w-2xl px-4">
             <CheckCircle2 className="w-24 h-24 md:w-32 md:h-32 text-success mx-auto mb-6 shrink-0" />
             <h1 className="text-4xl md:text-6xl font-display font-bold text-primary-foreground mb-4 leading-tight">
@@ -364,12 +377,11 @@ export default function Urna() {
               onClick={() => setShowPinPad(true)} 
               className="bg-gold text-accent-foreground hover:bg-gold-light text-lg md:text-2xl px-8 py-6 h-auto w-full md:w-auto font-bold whitespace-normal flex items-center justify-center mx-auto"
             >
-              <Lock className="w-6 h-6 mr-2" />
-              Desbloquear Urna (Mesário)
+              <Lock className="w-6 h-6 mr-2 shrink-0" />
+              <span>Desbloquear Urna (Mesário)</span>
             </Button>
           </div>
         ) : (
-          // Teclado Numérico do Mesário
           <div className="text-center w-full max-w-sm px-4 flex flex-col items-center">
             <Lock className="w-12 h-12 text-gold mb-4" />
             <h2 className="text-2xl md:text-3xl font-bold text-primary-foreground mb-8">PIN do Mesário</h2>
@@ -567,9 +579,9 @@ export default function Urna() {
               {showConfirm ? (
                 'CONFIRMAR'
               ) : selectedIds.length === 0 ? (
-                <><Vote className="w-6 h-6 md:w-8 md:h-8 mr-2" /> VOTAR</>
+                <><Vote className="w-6 h-6 md:w-8 md:h-8 mr-2 shrink-0" /> <span>VOTAR</span></>
               ) : (
-                <><Vote className="w-6 h-6 md:w-8 md:h-8 mr-2" /> VOTAR ({selectedIds.length})</>
+                <><Vote className="w-6 h-6 md:w-8 md:h-8 mr-2 shrink-0" /> <span>VOTAR ({selectedIds.length})</span></>
               )}
             </Button>
           </div>
