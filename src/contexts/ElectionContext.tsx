@@ -25,6 +25,12 @@ export interface Candidate {
   currentRole: CandidateRole;
 }
 
+// NOVO: Estrutura do Eleitor Cadastrado
+export interface Voter {
+  code: string;
+  createdAt: number;
+}
+
 export type ScrutinyType = 'presbitero' | 'diacono';
 export type ScrutinyStatus = 'pending' | 'open' | 'closed';
 
@@ -40,6 +46,11 @@ export interface Scrutiny {
   participatingCandidateIds: string[];
   resultsApproved: boolean;
   electedIds: string[];
+  
+  // NOVO: Regras de Autenticação do Turno
+  authMode: 'pin' | 'code'; // 'pin' = tablets com mesários, 'code' = cada um no seu celular
+  pin?: string; // O PIN definido pelo admin para liberar a urna (se authMode === 'pin')
+  votedCodes: string[]; // Lista de códigos que já votaram neste turno (para bloquear voto duplo)
 }
 
 export interface ElectionState {
@@ -54,6 +65,7 @@ export interface ElectionState {
   electedPresbyters: string[];
   electedDeacons: string[];
   alerts: string[];
+  voters: Voter[]; // NOVO: Lista geral de códigos ativos
 }
 
 const initialState: ElectionState = {
@@ -68,6 +80,7 @@ const initialState: ElectionState = {
   electedPresbyters: [],
   electedDeacons: [],
   alerts: [],
+  voters: [], // Inicia vazio
 };
 
 type Action =
@@ -75,15 +88,20 @@ type Action =
   | { type: 'ADD_CANDIDATE'; payload: Candidate }
   | { type: 'REMOVE_CANDIDATE'; payload: string }
   | { type: 'UPDATE_CANDIDATE'; payload: Candidate }
-  | { type: 'START_SCRUTINY'; payload: { type: ScrutinyType; round: number; participatingCandidateIds: string[] } }
+  // ATUALIZADO: START_SCRUTINY agora exige authMode e opcionalmente o PIN
+  | { type: 'START_SCRUTINY'; payload: { type: ScrutinyType; round: number; participatingCandidateIds: string[]; authMode: 'pin' | 'code'; pin?: string; } }
   | { type: 'RESTART_SCRUTINY'; payload: string }
-  | { type: 'CAST_VOTE'; payload: { scrutinyId: string; candidateIds: string[] } }
+  // ATUALIZADO: CAST_VOTE agora recebe o código do eleitor (se estiver no modo 'code')
+  | { type: 'CAST_VOTE'; payload: { scrutinyId: string; candidateIds: string[]; voterCode?: string; } }
   | { type: 'CLOSE_SCRUTINY'; payload: string }
   | { type: 'APPROVE_RESULTS'; payload: string }
   | { type: 'ADD_ALERT'; payload: string }
   | { type: 'CLEAR_ALERTS' }
   | { type: 'SET_ELECTED'; payload: { type: ScrutinyType; candidateIds: string[] } }
   | { type: 'CLEAR_CANDIDATES' }
+  // NOVAS AÇÕES: Controle de Eleitores
+  | { type: 'ADD_VOTERS'; payload: Voter[] }
+  | { type: 'CLEAR_VOTERS' }
   | { type: 'RESET' }
   | { type: 'SYNC_FROM_FIREBASE'; payload: ElectionState };
 
@@ -125,23 +143,15 @@ export function resolveResults(
 
 function reducer(state: ElectionState, action: Action): ElectionState {
   switch (action.type) {
-    case 'SYNC_FROM_FIREBASE':
-      return action.payload;
-
-    case 'SET_ELECTION':
-      return { ...state, ...action.payload };
-
-    case 'ADD_CANDIDATE':
-      return { ...state, candidates: [...state.candidates, action.payload] };
-
-    case 'REMOVE_CANDIDATE':
-      return { ...state, candidates: state.candidates.filter(c => c.id !== action.payload) };
-
-    case 'UPDATE_CANDIDATE':
-      return {
-        ...state,
-        candidates: state.candidates.map(c => c.id === action.payload.id ? action.payload : c),
-      };
+    case 'SYNC_FROM_FIREBASE': return action.payload;
+    case 'SET_ELECTION': return { ...state, ...action.payload };
+    case 'ADD_CANDIDATE': return { ...state, candidates: [...state.candidates, action.payload] };
+    case 'REMOVE_CANDIDATE': return { ...state, candidates: state.candidates.filter(c => c.id !== action.payload) };
+    case 'UPDATE_CANDIDATE': return { ...state, candidates: state.candidates.map(c => c.id === action.payload.id ? action.payload : c) };
+    
+    // NOVO: Ações de Eleitores
+    case 'ADD_VOTERS': return { ...state, voters: [...(state.voters || []), ...action.payload] };
+    case 'CLEAR_VOTERS': return { ...state, voters: [] };
 
     case 'START_SCRUTINY': {
       const newScrutiny: Scrutiny = {
@@ -156,6 +166,9 @@ function reducer(state: ElectionState, action: Action): ElectionState {
         participatingCandidateIds: action.payload.participatingCandidateIds,
         resultsApproved: false,
         electedIds: [],
+        authMode: action.payload.authMode, // Aplica o modo escolhido
+        pin: action.payload.pin, // Aplica o PIN personalizado
+        votedCodes: [], // Inicializa a lista de quem já votou vazia
       };
       action.payload.participatingCandidateIds.forEach(id => { newScrutiny.votes[id] = 0; });
       return { ...state, scrutinies: [...state.scrutinies, newScrutiny], currentScrutinyId: newScrutiny.id };
@@ -186,7 +199,17 @@ function reducer(state: ElectionState, action: Action): ElectionState {
           if (s.id !== scrutinyId) return s;
           const resetVotes: Record<string, number> = {};
           s.participatingCandidateIds.forEach(id => { resetVotes[id] = 0; });
-          return { ...s, status: 'open', votes: resetVotes, totalVotes: 0, blankVotes: 0, startedAt: Date.now(), electedIds: [], resultsApproved: false };
+          return { 
+            ...s, 
+            status: 'open', 
+            votes: resetVotes, 
+            totalVotes: 0, 
+            blankVotes: 0, 
+            startedAt: Date.now(), 
+            electedIds: [], 
+            resultsApproved: false,
+            votedCodes: [] // NOVO: Ao reiniciar, zera os códigos que já votaram para todos poderem votar de novo
+          };
         })
       };
     }
@@ -209,8 +232,23 @@ function reducer(state: ElectionState, action: Action): ElectionState {
         const blankVotesToAdd = Math.max(0, effectiveMax - action.payload.candidateIds.length);
         const newBlankVotes = (s.blankVotes || 0) + blankVotesToAdd;
         
-        const shouldClose = state.voterGoal > 0 && newTotal >= state.voterGoal;
-        return { ...s, votes: newVotes, totalVotes: newTotal, blankVotes: newBlankVotes, status: shouldClose ? 'closed' as const : s.status };
+        // NOVO: Adiciona o código do eleitor na lista de "queimados"
+        const newVotedCodes = action.payload.voterCode 
+          ? [...(s.votedCodes || []), action.payload.voterCode] 
+          : s.votedCodes || [];
+
+        // NOVO: Se o quórum estiver vinculado aos eleitores (modo code), encerra ao atingir o total de códigos cadastrados
+        const currentVoterGoal = s.authMode === 'code' ? (state.voters?.length || 0) : state.voterGoal;
+        const shouldClose = currentVoterGoal > 0 && newTotal >= currentVoterGoal;
+        
+        return { 
+          ...s, 
+          votes: newVotes, 
+          totalVotes: newTotal, 
+          blankVotes: newBlankVotes, 
+          status: shouldClose ? 'closed' as const : s.status,
+          votedCodes: newVotedCodes
+        };
       });
 
       const closedScrutiny = scrutinies.find(s => s.id === action.payload.scrutinyId && s.status === 'closed');
@@ -297,7 +335,6 @@ export function ElectionProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => { stateRef.current = state; }, [state]);
 
-  // AQUI FOI REMOVIDO A BOMBA RELÓGIO (O setDoc do snapshot.exists)
   useEffect(() => {
     const docRef = doc(db, 'elections', ELECTION_DOC_ID);
     const unsubscribe = onSnapshot(docRef, (snapshot) => {
@@ -308,29 +345,40 @@ export function ElectionProvider({ children }: { children: ReactNode }) {
     return () => unsubscribe();
   }, []);
 
-  // AGORA TODAS AS AÇÕES PASSAM PELA TRANSAÇÃO DE SEGURANÇA
   const dispatch = async (action: Action) => {
     const docRef = doc(db, 'elections', ELECTION_DOC_ID);
     
     try {
       await runTransaction(db, async (transaction) => {
         const sfDoc = await transaction.get(docRef);
-        
-        // Se o banco ainda não existir na primeira vez que for salvar algo, ele cria baseado no initialState
         const remoteState = sfDoc.exists() ? (sfDoc.data() as ElectionState) : initialState;
         
-        // Trava de segurança para Votos Atrasados
         if (action.type === 'CAST_VOTE') {
           const currentScrutiny = remoteState.scrutinies.find(s => s.id === action.payload.scrutinyId);
           if (!currentScrutiny || currentScrutiny.status !== 'open') {
             throw new Error("Voto rejeitado: A votação já foi encerrada.");
           }
+
+          // NOVO: TRAVA DE SEGURANÇA PARA CÓDIGOS (Impede fraude e voto duplo no backend)
+          if (currentScrutiny.authMode === 'code') {
+            if (!action.payload.voterCode) {
+              throw new Error("Código de autenticação obrigatório.");
+            }
+            
+            // 1. Verifica se o código existe no sistema
+            const isValidCode = remoteState.voters?.some(v => v.code === action.payload.voterCode);
+            if (!isValidCode) {
+              throw new Error("Código inválido ou inexistente.");
+            }
+
+            // 2. Verifica se o código JÁ VOTOU neste turno específico
+            if (currentScrutiny.votedCodes?.includes(action.payload.voterCode)) {
+              throw new Error("VOTO NEGADO: Este código já foi utilizado neste turno.");
+            }
+          }
         }
 
-        // Aplica a alteração matematicamente em cima do dado do servidor (e não do tablet)
         const nextState = reducer(remoteState, action);
-        
-        // Salva a alteração com total segurança
         transaction.set(docRef, nextState);
       });
     } catch (error) { 
