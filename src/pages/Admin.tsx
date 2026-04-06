@@ -287,7 +287,6 @@ export default function Admin() {
     }
   };
 
-  // NOVO: Função para excluir um único eleitor
   const handleDeleteSingleVoter = (codeToRemove: string) => {
     if (confirm(`Tem certeza que deseja excluir o código ${codeToRemove}?`)) {
       const updatedVoters = voters.filter(v => v.code !== codeToRemove);
@@ -460,7 +459,6 @@ export default function Admin() {
                         <span className="font-mono font-bold text-base md:text-lg tracking-widest">{v.code}</span>
                       </div>
                       
-                      {/* ATUALIZADO: Dois botões (Imprimir e Excluir) */}
                       <div className="flex items-center gap-1">
                         <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-blue-600" onClick={() => handlePrint([v])} title="Imprimir este">
                           <Printer className="w-3 h-3" />
@@ -733,7 +731,8 @@ export default function Admin() {
             <div 
               key={v.code} 
               className="flex flex-col items-center justify-center p-2 text-center w-full"
-              style={{ pageBreakAfter: 'always', margin: '0 auto' }}
+              // CORREÇÃO APLICADA AQUI: Não quebra a página após o último código impresso
+              style={{ pageBreakAfter: index === printingVoters.length - 1 ? 'auto' : 'always', margin: '0 auto' }}
             >
               <h2 className="font-bold text-lg leading-tight uppercase">IPB Nova Brasília</h2>
               <p className="text-[10px] font-bold uppercase mt-1">Assembleia Extraordinária</p>
