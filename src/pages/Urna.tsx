@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useElection } from '@/contexts/ElectionContext';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, CheckCircle2, XCircle, Vote, Users, Sun, Moon, Loader2, Lock, Delete } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, XCircle, Vote, Users, Sun, Moon, Loader2, Lock, Delete, Camera, KeyRound } from 'lucide-react';
 import { toast } from 'sonner';
+import { Html5QrcodeScanner } from 'html5-qrcode';
 
 const playConfirmSound = () => {
   try {
@@ -19,7 +20,6 @@ const playConfirmSound = () => {
 
       oscillator.connect(gainNode);
       gainNode.connect(audioCtx.destination);
-
       oscillator.type = 'triangle';
       oscillator.frequency.value = frequency;
 
@@ -35,7 +35,7 @@ const playConfirmSound = () => {
     playNote(659.25, now + 0.15, 0.4);
 
   } catch (error) {
-    console.error("Erro ao reproduzir o som de confirmação", error);
+    console.error("Erro ao reproduzir som", error);
   }
 };
 
@@ -50,13 +50,21 @@ export default function Urna() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [voteError, setVoteError] = useState(false);
 
-  // NOVO: Estados do Cadeado do Mesário
   const [showPinPad, setShowPinPad] = useState(false);
   const [pinInput, setPinInput] = useState('');
+
+  // NOVO: Estados de Autenticação do Eleitor (Para o modo Celular/QR Code)
+  const [authenticatedCode, setAuthenticatedCode] = useState<string | null>(null);
+  const [authInput, setAuthInput] = useState('');
+  const [isScanning, setIsScanning] = useState(false);
 
   const currentScrutiny = state.scrutinies.find(s => s.id === state.currentScrutinyId);
   const isOpen = currentScrutiny?.status === 'open';
   const votingClosed = currentScrutiny && currentScrutiny.status === 'closed';
+  
+  // Define qual é o modo de autenticação deste turno (se for um turno antigo, assume PIN por padrão)
+  const authMode = currentScrutiny?.authMode || 'pin';
+  const requiredPin = currentScrutiny?.pin || '4321';
 
   // Limpeza Síncrona Forçada (Amnésia Absoluta)
   const currentScrutinyKey = `${state.currentScrutinyId}-${currentScrutiny?.startedAt}-${isOpen}`;
@@ -71,7 +79,53 @@ export default function Urna() {
     setIsSubmitting(false);
     setShowPinPad(false);
     setPinInput('');
+    setAuthenticatedCode(null);
+    setAuthInput('');
+    setIsScanning(false);
   }
+
+  // NOVO: Efeito para gerenciar a câmera do QR Code
+  useEffect(() => {
+    if (isScanning) {
+      const scanner = new Html5QrcodeScanner(
+        "qr-reader",
+        { fps: 10, qrbox: { width: 250, height: 250 }, rememberLastUsedCamera: true },
+        false
+      );
+      
+      scanner.render((decodedText) => {
+        scanner.clear();
+        setIsScanning(false);
+        handleValidateVoterCode(decodedText);
+      }, undefined);
+
+      return () => {
+        scanner.clear().catch(e => console.error("Erro ao limpar scanner", e));
+      };
+    }
+  }, [isScanning]);
+
+  const handleValidateVoterCode = (codeToTest: string) => {
+    const cleanCode = codeToTest.trim();
+    if (!cleanCode) return;
+
+    // Verifica se o código existe no banco
+    const isValidCode = state.voters?.some(v => v.code === cleanCode);
+    if (!isValidCode) {
+      toast.error('Código inválido ou inexistente.', { position: 'top-center' });
+      return;
+    }
+
+    // Verifica se o código JÁ votou neste escrutínio
+    if (currentScrutiny?.votedCodes?.includes(cleanCode)) {
+      toast.error('VOTO NEGADO: Este código já foi utilizado neste turno.', { position: 'top-center', duration: 5000 });
+      return;
+    }
+
+    // Se passou, autentica o usuário e libera a urna
+    setAuthenticatedCode(cleanCode);
+    toast.success('Código validado! Voto liberado.', { position: 'top-center' });
+  };
 
   const alreadyElected = currentScrutiny?.type === 'presbitero' ? state.electedPresbyters : state.electedDeacons;
   const totalSlots = currentScrutiny?.type === 'presbitero' ? state.presbyterSlots : state.deaconSlots;
@@ -106,7 +160,15 @@ export default function Urna() {
     setIsSubmitting(true);
 
     try {
-      await dispatch({ type: 'CAST_VOTE', payload: { scrutinyId: currentScrutiny.id, candidateIds: selectedIds } });
+      // Passa o código do eleitor junto para o banco validar e "queimar"
+      await dispatch({ 
+        type: 'CAST_VOTE', 
+        payload: { 
+          scrutinyId: currentScrutiny.id, 
+          candidateIds: selectedIds,
+          voterCode: authenticatedCode || undefined
+        } 
+      });
       
       playConfirmSound();
       setHasVoted(true);
@@ -127,20 +189,21 @@ export default function Urna() {
     setVoteError(false); 
     setShowPinPad(false);
     setPinInput('');
+    setAuthenticatedCode(null);
+    setAuthInput('');
   };
 
-  // NOVO: Lógica do Teclado Numérico
   const handlePinPress = (num: string) => {
     if (pinInput.length < 4) {
       const newPin = pinInput + num;
       setPinInput(newPin);
       
       if (newPin.length === 4) {
-        if (newPin === '4321') {
+        if (newPin === requiredPin) {
           handleNewVote();
         } else {
           toast.error('PIN Incorreto!', { position: 'top-center' });
-          setPinInput(''); // Limpa para tentar de novo
+          setPinInput(''); 
         }
       }
     }
@@ -164,7 +227,75 @@ export default function Urna() {
     );
   }
 
-  // TELA DE ERRO (Centralizada e Segura)
+  // NOVO: TELA DE AUTENTICAÇÃO DO ELEITOR (Se o modo for "Código/Celular")
+  if (authMode === 'code' && !authenticatedCode && !hasVoted) {
+    return (
+      <div className="h-screen flex flex-col bg-primary overflow-hidden relative">
+        <header className="p-4 border-b border-primary-foreground/10 flex items-center gap-4">
+          <Button variant="ghost" size="icon" onClick={() => navigate('/')} className="text-primary-foreground/20 hover:text-primary-foreground hover:bg-primary-foreground/10">
+            <ArrowLeft className="w-7 h-7" />
+          </Button>
+          <h1 className="text-2xl font-display font-bold text-primary-foreground">Acesso do Eleitor</h1>
+        </header>
+
+        <main className="flex-1 flex flex-col items-center justify-center p-6">
+          <div className="w-full max-w-md bg-primary-foreground/5 p-8 rounded-3xl border border-primary-foreground/10 shadow-2xl flex flex-col items-center text-center">
+            
+            <KeyRound className="w-16 h-16 text-gold mb-6" />
+            <h2 className="text-3xl font-display font-bold text-primary-foreground mb-2">Identificação</h2>
+            <p className="text-primary-foreground/70 text-lg mb-8">
+              Insira o código de 6 dígitos que você recebeu para liberar a urna.
+            </p>
+
+            {isScanning ? (
+              <div className="w-full mb-6">
+                <div id="qr-reader" className="w-full overflow-hidden rounded-xl border-2 border-gold/50 bg-black"></div>
+                <Button variant="ghost" onClick={() => setIsScanning(false)} className="mt-4 text-primary-foreground w-full">
+                  Cancelar Leitura da Câmera
+                </Button>
+              </div>
+            ) : (
+              <div className="w-full space-y-4">
+                <input
+                  type="text"
+                  maxLength={6}
+                  placeholder="000000"
+                  value={authInput}
+                  onChange={e => setAuthInput(e.target.value.replace(/[^0-9]/g, ''))}
+                  className="w-full bg-background/50 border-2 border-primary-foreground/20 text-primary-foreground text-center text-4xl tracking-widest font-mono py-4 rounded-xl focus:border-gold focus:ring-0 outline-none"
+                />
+                
+                <Button 
+                  onClick={() => handleValidateVoterCode(authInput)}
+                  disabled={authInput.length < 6}
+                  className="w-full bg-gold text-accent-foreground hover:bg-gold-light text-xl py-6 font-bold"
+                >
+                  ACESSAR URNA
+                </Button>
+
+                <div className="flex items-center gap-4 w-full py-4">
+                  <div className="flex-1 h-px bg-primary-foreground/20"></div>
+                  <span className="text-primary-foreground/40 text-sm font-bold uppercase">OU</span>
+                  <div className="flex-1 h-px bg-primary-foreground/20"></div>
+                </div>
+
+                <Button 
+                  onClick={() => setIsScanning(true)}
+                  variant="outline"
+                  className="w-full border-blue-500 text-blue-500 hover:bg-blue-500/10 hover:text-blue-400 text-lg py-6 font-bold"
+                >
+                  <Camera className="w-6 h-6 mr-2" />
+                  LER QR CODE COM A CÂMERA
+                </Button>
+              </div>
+            )}
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  // TELA DE ERRO
   if (voteError) {
     return (
       <div className="h-screen flex flex-col items-center justify-center bg-primary p-4 overflow-hidden">
@@ -198,12 +329,28 @@ export default function Urna() {
     );
   }
 
-  // TELA DE SUCESSO (Com Cadeado)
+  // TELA DE SUCESSO
   if (hasVoted) {
     return (
       <div className="h-screen flex flex-col items-center justify-center bg-primary p-4 overflow-hidden">
-        {!showPinPad ? (
-          // Tela Verde Padrão
+        
+        {/* Se for modo código, apenas agradece. O eleitor não pode resetar a urna. */}
+        {authMode === 'code' ? (
+           <div className="text-center w-full max-w-md md:max-w-2xl px-4">
+            <CheckCircle2 className="w-24 h-24 md:w-32 md:h-32 text-success mx-auto mb-6 shrink-0" />
+            <h1 className="text-4xl md:text-6xl font-display font-bold text-primary-foreground mb-4 leading-tight">
+              Voto Confirmado!
+            </h1>
+            <p className="text-primary-foreground/60 text-lg md:text-2xl mb-12">
+              Seu voto foi registrado com sucesso. Seu código de acesso foi inativado.
+            </p>
+            <div className="bg-primary-foreground/5 p-4 rounded-xl border border-primary-foreground/10">
+               <p className="text-gold font-bold text-xl">Muito obrigado pela participação.</p>
+               <p className="text-primary-foreground/50 mt-2">Você já pode fechar o aplicativo ou aguardar o próximo escrutínio.</p>
+            </div>
+          </div>
+        ) : !showPinPad ? (
+          // Tela Verde Padrão do Mesário
           <div className="text-center w-full max-w-md md:max-w-2xl px-4">
             <CheckCircle2 className="w-24 h-24 md:w-32 md:h-32 text-success mx-auto mb-6 shrink-0" />
             <h1 className="text-4xl md:text-6xl font-display font-bold text-primary-foreground mb-4 leading-tight">
@@ -221,12 +368,11 @@ export default function Urna() {
             </Button>
           </div>
         ) : (
-          // Teclado Numérico Customizado
+          // Teclado Numérico do Mesário
           <div className="text-center w-full max-w-sm px-4 flex flex-col items-center">
             <Lock className="w-12 h-12 text-gold mb-4" />
             <h2 className="text-2xl md:text-3xl font-bold text-primary-foreground mb-8">PIN do Mesário</h2>
             
-            {/* Display dos pontinhos da senha */}
             <div className="flex gap-4 mb-8">
               {[0, 1, 2, 3].map(i => (
                 <div key={i} className={`w-12 h-12 rounded-full border-2 flex items-center justify-center text-3xl transition-all ${pinInput.length > i ? 'bg-gold border-gold text-primary' : 'border-primary-foreground/30 text-transparent'}`}>
@@ -235,7 +381,6 @@ export default function Urna() {
               ))}
             </div>
 
-            {/* Teclado */}
             <div className="grid grid-cols-3 gap-4 w-full max-w-[300px]">
               {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(num => (
                 <button
@@ -271,7 +416,7 @@ export default function Urna() {
     );
   }
 
-  // TELA DE CARREGAMENTO (Centralizada)
+  // TELA DE CARREGAMENTO
   if (isSubmitting) {
     return (
       <div className="h-screen flex flex-col items-center justify-center bg-primary p-4 overflow-hidden">
