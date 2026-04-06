@@ -50,16 +50,21 @@ export default function Urna() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [voteError, setVoteError] = useState(false);
 
-  // NOVO: Efeito de Amnésia. Sempre que o escrutínio mudar, limpa a urna imediatamente.
+  const currentScrutiny = state.scrutinies.find(s => s.id === state.currentScrutinyId);
+  const isOpen = currentScrutiny?.status === 'open';
+  const votingClosed = currentScrutiny && currentScrutiny.status === 'closed';
+  
+  // Variável que guarda a hora exata que a urna foi aberta/reiniciada
+  const scrutinyStartedAt = currentScrutiny?.startedAt;
+
+  // NOVO VIGIA: Amnésia Absoluta. Ativa se mudar de ID, se abrir/fechar, ou se reiniciar.
   useEffect(() => {
     setSelectedIds([]);
     setShowConfirm(false);
     setVoteError(false);
     setHasVoted(false);
-  }, [state.currentScrutinyId]);
-
-  const currentScrutiny = state.scrutinies.find(s => s.id === state.currentScrutinyId);
-  const isOpen = currentScrutiny?.status === 'open';
+    setIsSubmitting(false);
+  }, [state.currentScrutinyId, isOpen, scrutinyStartedAt]);
 
   const alreadyElected = currentScrutiny?.type === 'presbitero' ? state.electedPresbyters : state.electedDeacons;
   const totalSlots = currentScrutiny?.type === 'presbitero' ? state.presbyterSlots : state.deaconSlots;
@@ -70,13 +75,11 @@ export default function Urna() {
         .filter(c => currentScrutiny.participatingCandidateIds.includes(c.id))
         .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
     : [];
-
-  const votingClosed = currentScrutiny && currentScrutiny.status === 'closed';
   
   const blankCount = effectiveMax - selectedIds.length;
 
   const toggleCandidate = (id: string) => {
-    if (hasVoted || isSubmitting) return;
+    if (hasVoted || isSubmitting || !isOpen) return;
     setSelectedIds(prev => {
       if (prev.includes(id)) return prev.filter(x => x !== id);
       if (prev.length >= effectiveMax) {
@@ -117,7 +120,7 @@ export default function Urna() {
     setVoteError(false); 
   };
 
-  // TELA DE ESPERA
+  // TELA DE ESPERA / FECHADA
   if (!isOpen || votingClosed) {
     return (
       <div className="h-screen flex flex-col items-center justify-center bg-primary p-8 overflow-hidden relative">
@@ -158,7 +161,7 @@ export default function Urna() {
           <Button 
             onClick={() => {
               setVoteError(false);
-              setSelectedIds([]); // NOVO: Garante que os votos somem por privacidade
+              setSelectedIds([]); // Garante que os votos somem por privacidade
             }} 
             className="bg-destructive text-destructive-foreground hover:bg-destructive/90 text-sm md:text-xl px-4 py-6 w-full shadow-xl font-bold tracking-wide h-auto whitespace-normal"
           >
