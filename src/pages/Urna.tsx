@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useElection } from '@/contexts/ElectionContext';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, CheckCircle2, Vote, Users, Sun, Moon } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Vote, Users, Sun, Moon, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 const playConfirmSound = () => {
@@ -45,7 +45,9 @@ export default function Urna() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [hasVoted, setHasVoted] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
-  const [highContrast, setHighContrast] = useState(false); // NOVO: Estado do Alto Contraste
+  const [highContrast, setHighContrast] = useState(false);
+  
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const currentScrutiny = state.scrutinies.find(s => s.id === state.currentScrutinyId);
   const isOpen = currentScrutiny?.status === 'open';
@@ -65,7 +67,7 @@ export default function Urna() {
   const blankCount = effectiveMax - selectedIds.length;
 
   const toggleCandidate = (id: string) => {
-    if (hasVoted) return;
+    if (hasVoted || isSubmitting) return;
     setSelectedIds(prev => {
       if (prev.includes(id)) return prev.filter(x => x !== id);
       if (prev.length >= effectiveMax) {
@@ -79,14 +81,32 @@ export default function Urna() {
     });
   };
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     if (!currentScrutiny) return;
     
-    playConfirmSound();
+    setIsSubmitting(true);
 
-    dispatch({ type: 'CAST_VOTE', payload: { scrutinyId: currentScrutiny.id, candidateIds: selectedIds } });
-    setHasVoted(true);
-    setShowConfirm(false);
+    try {
+      await dispatch({ type: 'CAST_VOTE', payload: { scrutinyId: currentScrutiny.id, candidateIds: selectedIds } });
+      
+      playConfirmSound();
+      setHasVoted(true);
+      setShowConfirm(false);
+      
+    } catch (error: any) {
+      // NOVO: Mensagem de erro que não some sozinha e orienta a chamar o mesário
+      toast.error(error.message || 'ERRO: Seu voto NÃO foi computado! Por favor, chame um mesário.', {
+        duration: Infinity, // Trava a mensagem na tela para sempre
+        position: 'top-center',
+        action: {
+          label: 'Entendi, vou tentar de novo',
+          onClick: () => {} // Apenas fecha o toast quando o botão for clicado
+        }
+      });
+      setShowConfirm(false); 
+    } finally {
+      setIsSubmitting(false); 
+    }
   };
 
   const handleNewVote = () => {
@@ -121,7 +141,7 @@ export default function Urna() {
             Voto Confirmado!
           </h1>
           <p className="text-primary-foreground/60 text-2xl mb-12">
-            Seu voto foi registrado com sucesso.
+            Seu voto foi registrado com segurança no servidor.
           </p>
           <Button onClick={handleNewVote} className="bg-gold text-accent-foreground hover:bg-gold-light text-2xl px-12 py-8">
             Liberar para o Próximo Eleitor
@@ -140,7 +160,6 @@ export default function Urna() {
               <Button variant="ghost" size="icon" onClick={() => navigate('/')} className="text-primary-foreground/20 hover:text-primary-foreground hover:bg-primary-foreground/10">
                 <ArrowLeft className="w-7 h-7" />
               </Button>
-              {/* NOVO: Botão de Alto Contraste */}
               <Button 
                 variant="outline" 
                 onClick={() => setHighContrast(!highContrast)}
@@ -173,7 +192,6 @@ export default function Urna() {
           {participatingCandidates.map(c => {
             const isSelected = selectedIds.includes(c.id);
             
-            // Lógica de cores baseada no Alto Contraste
             const cardBaseStyle = highContrast
               ? 'bg-white border-[3px] border-gray-300 hover:bg-gray-100'
               : 'bg-primary-foreground/5 border-[3px] border-transparent hover:bg-primary-foreground/10';
@@ -191,10 +209,12 @@ export default function Urna() {
               <button
                 key={c.id}
                 onClick={() => toggleCandidate(c.id)}
+                disabled={isSubmitting} 
                 className={`
                   w-[45%] sm:w-[30%] md:w-[22%] lg:w-[18%] max-w-[220px] shrink-0
                   relative p-3 md:p-4 rounded-xl transition-all duration-200 text-center flex flex-col items-center justify-center
                   ${isSelected ? cardSelectedStyle : cardBaseStyle}
+                  ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}
                 `}
               >
                 <div className={`w-16 h-16 md:w-24 md:h-24 mb-3 rounded-full overflow-hidden shrink-0 shadow-lg ${iconBgStyle}`}>
@@ -220,11 +240,9 @@ export default function Urna() {
         </div>
       </main>
 
-      {/* NOVO RODAPÉ: Botões ancorados à direita para o "Toque Duplo" */}
       <footer className="shrink-0 p-3 md:p-4 border-t border-primary-foreground/10 bg-primary/95 backdrop-blur shadow-[0_-10px_30px_rgba(0,0,0,0.3)]">
         <div className="max-w-7xl mx-auto flex items-center justify-between h-full">
           
-          {/* Lado Esquerdo: Mensagens */}
           <div className="flex-1 pr-4 hidden sm:block">
             {showConfirm ? (
               <p className="text-primary-foreground font-display font-bold text-lg md:text-2xl">
@@ -245,27 +263,30 @@ export default function Urna() {
             )}
           </div>
 
-          {/* Lado Direito: Botões Ancorados */}
           <div className="flex items-center justify-end gap-3 w-full sm:w-auto shrink-0">
-            {showConfirm && (
+            {showConfirm && !isSubmitting && (
               <Button variant="ghost" onClick={() => setShowConfirm(false)} className="text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground text-lg md:text-xl py-6 md:py-8 px-4 md:px-6">
                 Corrigir
               </Button>
             )}
             
             <Button
+              disabled={isSubmitting}
               onClick={showConfirm ? handleConfirm : () => setShowConfirm(true)}
               className={`
                 font-bold text-xl md:text-3xl py-6 md:py-8 shadow-xl transition-all flex-1 sm:flex-none
-                w-full sm:w-[260px] md:w-[320px] /* Tamanho fixo garante que o botão não mude de lugar */
-                ${showConfirm ? 'bg-success text-success-foreground hover:bg-success/90 animate-pulse-ring' : 
+                w-full sm:w-[260px] md:w-[320px] 
+                ${isSubmitting ? 'bg-primary-foreground/20 text-primary-foreground cursor-wait' :
+                  showConfirm ? 'bg-success text-success-foreground hover:bg-success/90 animate-pulse-ring' : 
                   selectedIds.length === 0 ? 'bg-secondary text-secondary-foreground hover:bg-secondary/80' : 'bg-gold text-accent-foreground hover:bg-gold-light'}
               `}
             >
-              {showConfirm ? (
+              {isSubmitting ? (
+                <><Loader2 className="w-6 h-6 md:w-8 md:h-8 mr-2 animate-spin" /> SALVANDO...</>
+              ) : showConfirm ? (
                 'CONFIRMAR'
               ) : selectedIds.length === 0 ? (
-                `VOTAR`
+                `VOTAR EM BRANCO`
               ) : (
                 <><Vote className="w-6 h-6 md:w-8 md:h-8 mr-2" /> VOTAR ({selectedIds.length})</>
               )}
@@ -273,8 +294,7 @@ export default function Urna() {
           </div>
 
         </div>
-        {/* Mensagem mobile extra caso a tela seja muito pequena */}
-        {showConfirm && (
+        {showConfirm && !isSubmitting && (
           <p className="text-primary-foreground font-bold text-center mt-3 sm:hidden">
             {selectedIds.length === 0 ? `Confirmar ${blankCount} BRANCOS?` : `Confirmar ${selectedIds.length} candidato(s)?`}
           </p>
