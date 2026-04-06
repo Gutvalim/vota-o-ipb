@@ -110,7 +110,7 @@ export default function Urna() {
         }
       ).catch((err) => {
         console.error(err);
-        toast.error("Erro ao aceder à câmara. Verifique as permissões do navegador.");
+        toast.error("Erro ao acessar a câmera. Verifique as permissões do navegador.");
         setIsScanning(false);
       });
     }
@@ -158,7 +158,7 @@ export default function Urna() {
     setSelectedIds(prev => {
       if (prev.includes(id)) return prev.filter(x => x !== id);
       if (prev.length >= effectiveMax) {
-        toast.error(`Apenas pode selecionar até ${effectiveMax} candidato(s)`, {
+        toast.error(`Você só pode selecionar até ${effectiveMax} candidato(s)`, {
           position: 'top-center',
           duration: 3500,
         });
@@ -234,7 +234,7 @@ export default function Urna() {
           {state.title || 'Sistema de Votação'}
         </h1>
         <p className="text-primary-foreground/60 text-2xl mb-8 text-center px-4">
-          {votingClosed ? 'A votação foi encerrada. Aguarde o resultado.' : 'Nenhuma votação a decorrer no momento.'}
+          {votingClosed ? 'A votação foi encerrada. Aguarde o resultado.' : 'Nenhuma votação em andamento no momento.'}
         </p>
       </div>
     );
@@ -257,14 +257,14 @@ export default function Urna() {
             <KeyRound className="w-12 h-12 md:w-16 md:h-16 text-gold mb-4" />
             <h2 className="text-2xl md:text-3xl font-display font-bold text-primary-foreground mb-2">Identificação</h2>
             <p className="text-primary-foreground/70 text-base md:text-lg mb-6">
-              Insira o código de 6 dígitos que recebeu para desbloquear a urna.
+              Insira o código de 6 dígitos que você recebeu para liberar a urna.
             </p>
 
             {isScanning ? (
               <div className="w-full mb-4">
                 <div id="qr-reader" className="w-full overflow-hidden rounded-xl border-2 border-gold/50 bg-black min-h-[250px]"></div>
                 <Button variant="ghost" onClick={() => setIsScanning(false)} className="mt-4 text-primary-foreground w-full py-6">
-                  Cancelar Leitura da Câmara
+                  Cancelar Leitura da Câmera
                 </Button>
               </div>
             ) : (
@@ -310,7 +310,7 @@ export default function Urna() {
                   disabled={authInput.length < 6}
                   className="w-full bg-gold text-accent-foreground hover:bg-gold-light text-lg md:text-xl py-6 font-bold"
                 >
-                  ACEDER À URNA
+                  ACESSAR URNA
                 </Button>
 
                 <div className="flex items-center gap-4 w-full py-4">
@@ -325,7 +325,7 @@ export default function Urna() {
                   className="w-full border-blue-500 text-blue-500 hover:bg-blue-500/10 hover:text-blue-400 text-base sm:text-lg py-6 font-bold h-auto whitespace-normal flex items-center justify-center"
                 >
                   <Camera className="w-6 h-6 mr-2 shrink-0" />
-                  <span>LER QR CODE COM A CÂMARA</span>
+                  <span>LER QR CODE COM A CÂMERA</span>
                 </Button>
               </div>
             )}
@@ -345,7 +345,7 @@ export default function Urna() {
             Voto NÃO<br/>Computado!
           </h1>
           <p className="text-primary-foreground/90 text-lg md:text-2xl mb-6 font-bold px-2">
-            Houve uma falha na ligação com o servidor.
+            Houve uma falha na conexão com o servidor.
           </p>
           <div className="w-full bg-primary/50 p-4 md:p-6 rounded-xl border border-primary-foreground/10 mb-8">
             <p className="text-primary-foreground/70 text-base md:text-xl">
@@ -381,11 +381,11 @@ export default function Urna() {
               Voto Confirmado!
             </h1>
             <p className="text-primary-foreground/60 text-lg md:text-2xl mb-8">
-              O seu voto foi registado com sucesso. O seu código de acesso foi inativado.
+              Seu voto foi registrado com sucesso. Seu código de acesso foi inativado.
             </p>
             <div className="bg-primary-foreground/5 p-4 rounded-xl border border-primary-foreground/10 mb-8 w-full">
                <p className="text-gold font-bold text-xl">Muito obrigado pela participação.</p>
-               <p className="text-primary-foreground/50 mt-2">Pode fechar a aplicação ou passar ao próximo.</p>
+               <p className="text-primary-foreground/50 mt-2">Você já pode fechar o aplicativo ou passar para o próximo.</p>
             </div>
             
             <Button 
@@ -402,7 +402,7 @@ export default function Urna() {
               Voto Confirmado!
             </h1>
             <p className="text-primary-foreground/60 text-lg md:text-2xl mb-12">
-              O seu voto foi registado com segurança no servidor.
+              Seu voto foi registrado com segurança no servidor.
             </p>
             <Button 
               onClick={() => setShowPinPad(true)} 
@@ -470,10 +470,10 @@ export default function Urna() {
             Aguarde...
           </h1>
           <p className="text-primary-foreground/90 text-lg md:text-2xl mb-4 font-bold px-2">
-            A enviar o seu voto para o servidor.
+            Enviando seu voto para o servidor.
           </p>
           <p className="text-primary-foreground/70 text-base md:text-xl mt-2 px-2">
-            Não feche a aplicação e não desligue o ecrã.
+            Não feche o aplicativo e não desligue a tela.
           </p>
         </div>
       </div>
