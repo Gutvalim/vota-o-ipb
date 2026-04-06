@@ -306,24 +306,32 @@ export default function Admin() {
   return (
     <>
       <style>{`
+        @media screen { .print-container { display: none; } }
         @media print {
-          @page { 
-            margin: 0; 
-            size: auto;
-          }
+          @page { margin: 0; size: 58mm auto; }
           html, body {
             height: auto !important;
             overflow: visible !important;
             background: white !important;
+            margin: 0 !important;
+            padding: 0 !important;
           }
+          .no-print { display: none !important; }
           .print-container {
             display: block !important;
             width: 58mm !important;
             margin: 0 !important;
             padding: 0 !important;
           }
-          .no-print {
-            display: none !important;
+          .ticket {
+            width: 58mm !important;
+            padding: 5mm !important;
+            text-align: center;
+            page-break-after: always;
+            box-sizing: border-box;
+          }
+          .ticket:last-child {
+            page-break-after: auto;
           }
         }
       `}</style>
@@ -741,36 +749,38 @@ export default function Admin() {
         </main>
       </div>
 
-      {/* MÓDULO DE IMPRESSÃO (ULTRA BLINDADO) */}
+      {/* MÓDULO DE IMPRESSÃO - CORRIGIDO PARA MOBILE */}
       {printingVoters.length > 0 && (
-        <div className="hidden print-container font-sans text-black bg-white" style={{ position: 'absolute', top: 0, left: 0 }}>
+        <div className="print-container font-sans text-black bg-white">
           {printingVoters.map((v, index) => (
             <div 
               key={v.code} 
-              className="flex flex-col items-center justify-center p-2 text-center w-full"
+              className="ticket"
               style={{ 
-                pageBreakAfter: index === printingVoters.length - 1 ? 'auto' : 'always', 
-                breakInside: 'avoid',
-                margin: '0 auto',
-                paddingBottom: '20px' // Margem segura para o corte físico da impressora
+                width: '58mm',
+                padding: '5mm',
+                textAlign: 'center',
+                boxSizing: 'border-box',
+                pageBreakAfter: index === printingVoters.length - 1 ? 'auto' : 'always',
+                breakInside: 'avoid'
               }}
             >
-              <h2 className="font-bold text-lg leading-tight uppercase">IPB Nova Brasília</h2>
-              <p className="text-[10px] font-bold uppercase mt-1">Assembleia Extraordinária</p>
+              <h2 style={{fontSize:'14px', margin:0, fontWeight: 'bold'}}>IPB NOVA BRASÍLIA</h2>
+              <p style={{fontSize:'10px', margin:'2px 0 10px', fontWeight: 'bold'}}>ASSEMBLEIA EXTRAORDINÁRIA</p>
               
-              <div className="my-3 border-t-2 border-b-2 border-dashed border-black py-3 w-full">
-                <p className="text-xs uppercase mb-1 font-bold">CÓDIGO DE ACESSO</p>
-                <h1 className="text-4xl font-bold font-mono tracking-widest">{v.code}</h1>
+              <div style={{borderTop:'1px dashed #000', borderBottom:'1px dashed #000', padding:'10px 0', margin:'10px 0'}}>
+                <span style={{fontSize:'10px', fontWeight: 'bold'}}>CÓDIGO DE ACESSO</span>
+                <div style={{fontSize:'36px', fontWeight:'bold', fontFamily:'monospace'}}>{v.code}</div>
               </div>
               
-              <div className="bg-white p-2 border-2 border-black rounded-lg">
+              <div style={{display:'flex', justifyContent:'center', margin:'10px 0'}}>
                 <QRCodeSVG value={v.code} size={140} level="H" />
               </div>
               
-              <p className="text-[10px] mt-4 font-bold uppercase leading-tight">
+              <p style={{fontSize:'10px', lineHeight:'1.2', marginTop: '10px'}}>
                 Acesse o aplicativo da urna e aproxime<br/>este QR Code da câmera.
               </p>
-              <p className="text-[9px] mt-1 text-black/60 pb-4">
+              <p style={{fontSize:'8px', opacity:0.6, marginTop: '5px'}}>
                 Uso único e intransferível.
               </p>
             </div>
