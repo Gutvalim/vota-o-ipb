@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useReducer, useEffect, ReactNode, useRef } from 'react';
 import { initializeApp, getApps, getApp } from "firebase/app";
-import { getFirestore, doc, setDoc, onSnapshot, runTransaction } from "firebase/firestore";
+import { getFirestore, doc, onSnapshot, runTransaction } from "firebase/firestore";
 
 const firebaseConfig = {
   apiKey: "AIzaSyD5lSgqKvXFZBK8-PalruztaoZliXxT8GE",
@@ -297,50 +297,46 @@ export function ElectionProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => { stateRef.current = state; }, [state]);
 
+  // AQUI FOI REMOVIDO A BOMBA RELÓGIO (O setDoc do snapshot.exists)
   useEffect(() => {
     const docRef = doc(db, 'elections', ELECTION_DOC_ID);
     const unsubscribe = onSnapshot(docRef, (snapshot) => {
       if (snapshot.exists()) {
         defaultDispatch({ type: 'SYNC_FROM_FIREBASE', payload: snapshot.data() as ElectionState });
-      } else {
-        setDoc(docRef, initialState);
       }
     });
     return () => unsubscribe();
   }, []);
 
+  // AGORA TODAS AS AÇÕES PASSAM PELA TRANSAÇÃO DE SEGURANÇA
   const dispatch = async (action: Action) => {
     const docRef = doc(db, 'elections', ELECTION_DOC_ID);
     
-    // SISTEMA DE TRANSAÇÃO (Bloqueia sobreposição e rejeita votos após encerramento)
-    if (action.type === 'CAST_VOTE') {
-      try {
-        await runTransaction(db, async (transaction) => {
-          const sfDoc = await transaction.get(docRef);
-          if (!sfDoc.exists()) throw new Error("Documento não existe");
-          
-          const remoteState = sfDoc.data() as ElectionState;
-          
-          // TRAVA DE SEGURANÇA: Verifica o status da urna NO SERVIDOR antes de contar
+    try {
+      await runTransaction(db, async (transaction) => {
+        const sfDoc = await transaction.get(docRef);
+        
+        // Se o banco ainda não existir na primeira vez que for salvar algo, ele cria baseado no initialState
+        const remoteState = sfDoc.exists() ? (sfDoc.data() as ElectionState) : initialState;
+        
+        // Trava de segurança para Votos Atrasados
+        if (action.type === 'CAST_VOTE') {
           const currentScrutiny = remoteState.scrutinies.find(s => s.id === action.payload.scrutinyId);
           if (!currentScrutiny || currentScrutiny.status !== 'open') {
             throw new Error("Voto rejeitado: A votação já foi encerrada.");
           }
+        }
 
-          // Se a urna estiver aberta, aplica o voto com segurança
-          const nextState = reducer(remoteState, action);
-          transaction.set(docRef, nextState);
-        });
-      } catch (error) { 
-        console.error("Erro na transação de voto:", error); 
-        throw error; // Repassa o erro para a interface lidar (Urna.tsx)
-      }
-      return;
+        // Aplica a alteração matematicamente em cima do dado do servidor (e não do tablet)
+        const nextState = reducer(remoteState, action);
+        
+        // Salva a alteração com total segurança
+        transaction.set(docRef, nextState);
+      });
+    } catch (error) { 
+      console.error("Erro na transação:", error); 
+      throw error; 
     }
-    
-    // Outras ações normais (não precisam de transação atômica)
-    const nextState = reducer(stateRef.current, action);
-    try { await setDoc(docRef, nextState); } catch (error) { console.error("Erro na sincronização:", error); }
   };
 
   const resolveScrutinyResults = (scrutiny: Scrutiny, slots: number, alreadyElected: string[] = []) =>
