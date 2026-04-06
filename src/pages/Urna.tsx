@@ -53,7 +53,7 @@ export default function Urna() {
   const [showPinPad, setShowPinPad] = useState(false);
   const [pinInput, setPinInput] = useState('');
 
-  // NOVO: Estados de Autenticação do Eleitor (Para o modo Celular/QR Code)
+  // Estados de Autenticação do Eleitor (Para o modo Celular/QR Code)
   const [authenticatedCode, setAuthenticatedCode] = useState<string | null>(null);
   const [authInput, setAuthInput] = useState('');
   const [isScanning, setIsScanning] = useState(false);
@@ -84,7 +84,7 @@ export default function Urna() {
     setIsScanning(false);
   }
 
-  // NOVO: Efeito para gerenciar a câmera do QR Code
+  // Efeito para gerenciar a câmera do QR Code
   useEffect(() => {
     if (isScanning) {
       const scanner = new Html5QrcodeScanner(
@@ -154,19 +154,20 @@ export default function Urna() {
     });
   };
 
+  // FUNÇÃO CORRIGIDA COM AWAIT E TRATAMENTO DA VARIÁVEL VAZIA
   const handleConfirm = async () => {
     if (!currentScrutiny) return;
     
     setIsSubmitting(true);
 
     try {
-      // Passa o código do eleitor junto para o banco validar e "queimar"
       await dispatch({ 
         type: 'CAST_VOTE', 
         payload: { 
           scrutinyId: currentScrutiny.id, 
           candidateIds: selectedIds,
-          voterCode: authenticatedCode || undefined
+          // Correção: Envia string vazia em vez de undefined se não houver código
+          voterCode: authenticatedCode || ""
         } 
       });
       
@@ -227,7 +228,7 @@ export default function Urna() {
     );
   }
 
-  // NOVO: TELA DE AUTENTICAÇÃO DO ELEITOR (Se o modo for "Código/Celular")
+  // TELA DE AUTENTICAÇÃO DO ELEITOR (Se o modo for "Código/Celular")
   if (authMode === 'code' && !authenticatedCode && !hasVoted) {
     return (
       <div className="h-screen flex flex-col bg-primary overflow-hidden relative">
