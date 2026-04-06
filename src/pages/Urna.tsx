@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useElection } from '@/contexts/ElectionContext';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, CheckCircle2, XCircle, Vote, Users, Sun, Moon, Loader2 } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, XCircle, Vote, Users, Sun, Moon, Loader2, Lock, Delete } from 'lucide-react';
 import { toast } from 'sonner';
 
 const playConfirmSound = () => {
@@ -50,23 +50,27 @@ export default function Urna() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [voteError, setVoteError] = useState(false);
 
+  // NOVO: Estados do Cadeado do Mesário
+  const [showPinPad, setShowPinPad] = useState(false);
+  const [pinInput, setPinInput] = useState('');
+
   const currentScrutiny = state.scrutinies.find(s => s.id === state.currentScrutinyId);
   const isOpen = currentScrutiny?.status === 'open';
   const votingClosed = currentScrutiny && currentScrutiny.status === 'closed';
 
-  // NOVO: Limpeza Síncrona Forçada (Padrão Ouro do React para reset de estado)
-  // Criamos uma "Chave Única" para o momento atual da eleição
+  // Limpeza Síncrona Forçada (Amnésia Absoluta)
   const currentScrutinyKey = `${state.currentScrutinyId}-${currentScrutiny?.startedAt}-${isOpen}`;
   const [syncKey, setSyncKey] = useState(currentScrutinyKey);
 
-  // Se a eleição mudou (fechou, abriu, ou reiniciou), o código zera a urna ANTES de renderizar
   if (syncKey !== currentScrutinyKey) {
     setSyncKey(currentScrutinyKey);
-    setSelectedIds([]); // Amnésia total e imediata
+    setSelectedIds([]); 
     setShowConfirm(false);
     setVoteError(false);
     setHasVoted(false);
     setIsSubmitting(false);
+    setShowPinPad(false);
+    setPinInput('');
   }
 
   const alreadyElected = currentScrutiny?.type === 'presbitero' ? state.electedPresbyters : state.electedDeacons;
@@ -121,6 +125,25 @@ export default function Urna() {
     setHasVoted(false);
     setShowConfirm(false);
     setVoteError(false); 
+    setShowPinPad(false);
+    setPinInput('');
+  };
+
+  // NOVO: Lógica do Teclado Numérico
+  const handlePinPress = (num: string) => {
+    if (pinInput.length < 4) {
+      const newPin = pinInput + num;
+      setPinInput(newPin);
+      
+      if (newPin.length === 4) {
+        if (newPin === '4321') {
+          handleNewVote();
+        } else {
+          toast.error('PIN Incorreto!', { position: 'top-center' });
+          setPinInput(''); // Limpa para tentar de novo
+        }
+      }
+    }
   };
 
   // TELA DE ESPERA / FECHADA
@@ -164,7 +187,7 @@ export default function Urna() {
           <Button 
             onClick={() => {
               setVoteError(false);
-              setSelectedIds([]); // Garante que os votos somem por privacidade antes do mesário olhar
+              setSelectedIds([]); 
             }} 
             className="bg-destructive text-destructive-foreground hover:bg-destructive/90 text-sm md:text-xl px-4 py-6 w-full shadow-xl font-bold tracking-wide h-auto whitespace-normal"
           >
@@ -175,22 +198,75 @@ export default function Urna() {
     );
   }
 
-  // TELA DE SUCESSO
+  // TELA DE SUCESSO (Com Cadeado)
   if (hasVoted) {
     return (
       <div className="h-screen flex flex-col items-center justify-center bg-primary p-4 overflow-hidden">
-        <div className="text-center w-full max-w-md md:max-w-2xl px-4">
-          <CheckCircle2 className="w-24 h-24 md:w-32 md:h-32 text-success mx-auto mb-6 shrink-0" />
-          <h1 className="text-4xl md:text-6xl font-display font-bold text-primary-foreground mb-4 leading-tight">
-            Voto Confirmado!
-          </h1>
-          <p className="text-primary-foreground/60 text-lg md:text-2xl mb-10">
-            Seu voto foi registrado com segurança no servidor.
-          </p>
-          <Button onClick={handleNewVote} className="bg-gold text-accent-foreground hover:bg-gold-light text-lg md:text-2xl px-8 py-6 h-auto w-full md:w-auto font-bold whitespace-normal">
-            Liberar para o Próximo Eleitor
-          </Button>
-        </div>
+        {!showPinPad ? (
+          // Tela Verde Padrão
+          <div className="text-center w-full max-w-md md:max-w-2xl px-4">
+            <CheckCircle2 className="w-24 h-24 md:w-32 md:h-32 text-success mx-auto mb-6 shrink-0" />
+            <h1 className="text-4xl md:text-6xl font-display font-bold text-primary-foreground mb-4 leading-tight">
+              Voto Confirmado!
+            </h1>
+            <p className="text-primary-foreground/60 text-lg md:text-2xl mb-12">
+              Seu voto foi registrado com segurança no servidor.
+            </p>
+            <Button 
+              onClick={() => setShowPinPad(true)} 
+              className="bg-gold text-accent-foreground hover:bg-gold-light text-lg md:text-2xl px-8 py-6 h-auto w-full md:w-auto font-bold whitespace-normal flex items-center justify-center mx-auto"
+            >
+              <Lock className="w-6 h-6 mr-2" />
+              Desbloquear Urna (Mesário)
+            </Button>
+          </div>
+        ) : (
+          // Teclado Numérico Customizado
+          <div className="text-center w-full max-w-sm px-4 flex flex-col items-center">
+            <Lock className="w-12 h-12 text-gold mb-4" />
+            <h2 className="text-2xl md:text-3xl font-bold text-primary-foreground mb-8">PIN do Mesário</h2>
+            
+            {/* Display dos pontinhos da senha */}
+            <div className="flex gap-4 mb-8">
+              {[0, 1, 2, 3].map(i => (
+                <div key={i} className={`w-12 h-12 rounded-full border-2 flex items-center justify-center text-3xl transition-all ${pinInput.length > i ? 'bg-gold border-gold text-primary' : 'border-primary-foreground/30 text-transparent'}`}>
+                  {pinInput.length > i ? '•' : ''}
+                </div>
+              ))}
+            </div>
+
+            {/* Teclado */}
+            <div className="grid grid-cols-3 gap-4 w-full max-w-[300px]">
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(num => (
+                <button
+                  key={num}
+                  onClick={() => handlePinPress(num.toString())}
+                  className="w-full aspect-square rounded-2xl bg-primary-foreground/10 text-primary-foreground text-3xl font-bold hover:bg-primary-foreground/20 active:bg-primary-foreground/30 transition-colors flex items-center justify-center"
+                >
+                  {num}
+                </button>
+              ))}
+              <button
+                onClick={() => { setShowPinPad(false); setPinInput(''); }}
+                className="w-full aspect-square rounded-2xl bg-destructive/20 text-destructive hover:bg-destructive/30 active:bg-destructive/40 transition-colors flex items-center justify-center"
+              >
+                <XCircle className="w-8 h-8" />
+              </button>
+              <button
+                onClick={() => handlePinPress('0')}
+                className="w-full aspect-square rounded-2xl bg-primary-foreground/10 text-primary-foreground text-3xl font-bold hover:bg-primary-foreground/20 active:bg-primary-foreground/30 transition-colors flex items-center justify-center"
+              >
+                0
+              </button>
+              <button
+                onClick={() => setPinInput(prev => prev.slice(0, -1))}
+                className="w-full aspect-square rounded-2xl bg-primary-foreground/10 text-primary-foreground hover:bg-primary-foreground/20 active:bg-primary-foreground/30 transition-colors flex items-center justify-center"
+              >
+                 <Delete className="w-8 h-8" />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
