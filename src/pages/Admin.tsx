@@ -57,16 +57,21 @@ export default function Admin() {
   const [selectedParticipants, setSelectedParticipants] = useState<string[]>([]);
 
   const [voterCountToGenerate, setVoterCountToGenerate] = useState<number | string>(1);
-  
-  // A lista de impressão não será limpa automaticamente para evitar bugs no mobile
   const [printingVoters, setPrintingVoters] = useState<Voter[]>([]);
   const [searchVoter, setSearchVoter] = useState('');
   
-  // Controle do Modal de Faltantes
   const [showPendingModal, setShowPendingModal] = useState(false);
 
   const [authMode, setAuthMode] = useState<'pin' | 'code'>('pin');
   const [customPin, setCustomPin] = useState('4321');
+
+  useEffect(() => {
+    const handleAfterPrint = () => {
+      setPrintingVoters([]);
+    };
+    window.addEventListener('afterprint', handleAfterPrint);
+    return () => window.removeEventListener('afterprint', handleAfterPrint);
+  }, []);
 
   if (!currentUser) {
     navigate('/login');
@@ -77,7 +82,6 @@ export default function Admin() {
   const isVotingOpen = currentScrutiny?.status === 'open';
   const pendingUsers = users.filter(u => !u.approved);
   const voters = state.voters || [];
-
   const votedCodesList = currentScrutiny?.votedCodes || [];
 
   const handleSaveElection = (field: string, value: string | number) => {
@@ -296,7 +300,6 @@ export default function Admin() {
     if (votersToPrint.length === 0) return;
     setPrintingVoters(votersToPrint);
     
-    // Tempo seguro para o DOM renderizar o QR Code antes da chamada nativa de impressão
     setTimeout(() => {
       window.print();
     }, 800);
@@ -308,7 +311,6 @@ export default function Admin() {
   return (
     <>
       <style>{`
-        /* TÉCNICA DE ACESSIBILIDADE: Oculta visualmente, mas mantém no DOM para o celular renderizar perfeito */
         @media screen { 
           .print-container { 
             position: absolute !important;
@@ -322,8 +324,6 @@ export default function Admin() {
             border: 0 !important;
           } 
         }
-
-        /* REGRAS DE IMPRESSÃO ESTritas */
         @media print {
           @page { 
             margin: 0; 
@@ -336,9 +336,7 @@ export default function Admin() {
             margin: 0 !important;
             padding: 0 !important;
           }
-          .no-print { 
-            display: none !important; 
-          }
+          .no-print { display: none !important; }
           .print-container {
             display: block !important;
             position: static !important;
@@ -347,6 +345,7 @@ export default function Admin() {
             overflow: visible !important;
             height: auto !important;
             margin: 0 auto !important;
+            padding: 0 !important;
           }
           .ticket {
             width: 58mm !important;
@@ -845,7 +844,7 @@ export default function Admin() {
         </div>
       )}
 
-      {/* MÓDULO DE IMPRESSÃO BLINDADO */}
+      {/* MÓDULO DE IMPRESSÃO (NOVA URL COM CÓDIGO) */}
       {printingVoters.length > 0 && (
         <div className="print-container font-sans text-black bg-white">
           {printingVoters.map((v, index) => (
@@ -866,11 +865,12 @@ export default function Admin() {
               </div>
               
               <div style={{display:'flex', justifyContent:'center', margin:'10px 0'}}>
-                <QRCodeSVG value={v.code} size={140} level="H" />
+                {/* Aqui a mágica acontece: o QR Code agora é um link direto! Nível M para não borrar na térmica */}
+                <QRCodeSVG value={`https://vota.ipbnb.com.br/urna?codigo=${v.code}`} size={140} level="M" />
               </div>
               
               <p style={{fontSize:'10px', lineHeight:'1.2', marginTop: '10px'}}>
-                Acesse o aplicativo da urna e aproxime<br/>este QR Code da câmera.
+                Aponte a câmera do celular para este<br/>QR Code e a urna abrirá sozinha.
               </p>
               <p style={{fontSize:'8px', opacity:0.6, marginTop: '5px'}}>
                 Uso único e intransferível.
