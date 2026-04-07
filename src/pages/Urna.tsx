@@ -57,6 +57,9 @@ export default function Urna() {
   const [authenticatedCode, setAuthenticatedCode] = useState<string | null>(null);
   const [authInput, setAuthInput] = useState('');
   const [isScanning, setIsScanning] = useState(false);
+  
+  // Impede que o sistema tente ler a URL mais de uma vez e trave com mensagens duplicadas
+  const [urlCodeProcessed, setUrlCodeProcessed] = useState(false);
 
   const currentScrutiny = state.scrutinies.find(s => s.id === state.currentScrutinyId);
   const isOpen = currentScrutiny?.status === 'open';
@@ -65,7 +68,7 @@ export default function Urna() {
   const authMode = currentScrutiny?.authMode || 'pin';
   const requiredPin = currentScrutiny?.pin || '4321';
 
-  // Limpeza Síncrona Forçada (Amnésia Absoluta)
+  // Limpeza Síncrona Forçada (Amnésia Absoluta entre turnos)
   const currentScrutinyKey = `${state.currentScrutinyId}-${currentScrutiny?.startedAt}-${isOpen}`;
   const [syncKey, setSyncKey] = useState(currentScrutinyKey);
 
@@ -81,9 +84,26 @@ export default function Urna() {
     setAuthenticatedCode(null);
     setAuthInput('');
     setIsScanning(false);
+    setUrlCodeProcessed(false); // Se a pessoa ficou na tela até o próximo turno, permite ler a URL de novo
   }
 
-  // Câmera abre direto na lente traseira (environment)
+  // Leitura Automática da URL (A Mágica do QR Code impresso)
+  useEffect(() => {
+    // Pega o que está escrito depois do "?codigo=" na barra de endereços
+    const params = new URLSearchParams(window.location.search);
+    const urlCode = params.get('codigo');
+
+    // Se o código estiver lá, a votação estiver aberta, for o modo celular, e ele ainda não votou...
+    if (isOpen && authMode === 'code' && !authenticatedCode && !hasVoted && !urlCodeProcessed && urlCode) {
+      // Confirma que o banco de dados já carregou para não dar erro falso
+      if (state.voters && state.voters.length > 0) {
+        setUrlCodeProcessed(true); // Marca como processado
+        handleValidateVoterCode(urlCode); // Autentica automaticamente!
+      }
+    }
+  }, [isOpen, authMode, authenticatedCode, hasVoted, urlCodeProcessed, state.voters]);
+
+  // Câmera abre direto na lente traseira (environment) para quem prefere escanear na tela
   useEffect(() => {
     let html5QrCode: Html5Qrcode;
 
@@ -97,11 +117,17 @@ export default function Urna() {
           qrbox: { width: 250, height: 250 }
         },
         (decodedText) => {
+          // Se ler algo da tela e tiver URL inteira, arranca só o código do final
+          let finalCode = decodedText;
+          if (decodedText.includes('?codigo=')) {
+            finalCode = decodedText.split('?codigo=')[1];
+          }
+
           if (html5QrCode.isScanning) {
             html5QrCode.stop().then(() => {
               html5QrCode.clear();
               setIsScanning(false);
-              handleValidateVoterCode(decodedText);
+              handleValidateVoterCode(finalCode);
             }).catch(e => console.error(e));
           }
         },
@@ -138,7 +164,7 @@ export default function Urna() {
     }
 
     setAuthenticatedCode(cleanCode);
-    toast.success('Código validado! Voto liberado.', { position: 'top-center' });
+    toast.success('Autenticação Automática! Voto liberado.', { position: 'top-center' });
   };
 
   const alreadyElected = currentScrutiny?.type === 'presbitero' ? state.electedPresbyters : state.electedDeacons;
@@ -204,6 +230,7 @@ export default function Urna() {
     setPinInput('');
     setAuthenticatedCode(null);
     setAuthInput('');
+    setUrlCodeProcessed(false);
   };
 
   const handlePinPress = (num: string) => {
@@ -385,14 +412,14 @@ export default function Urna() {
             </p>
             <div className="bg-primary-foreground/5 p-4 rounded-xl border border-primary-foreground/10 mb-8 w-full">
                <p className="text-gold font-bold text-xl">Muito obrigado pela participação.</p>
-               <p className="text-primary-foreground/50 mt-2">Você já pode fechar o aplicativo ou passar para o próximo.</p>
+               <p className="text-primary-foreground/50 mt-2">Você já pode fechar esta página.</p>
             </div>
             
             <Button 
               onClick={handleNewVote} 
               className="bg-gold text-accent-foreground hover:bg-gold-light text-lg md:text-2xl px-8 py-6 h-auto w-full md:w-auto font-bold whitespace-normal"
             >
-              Próximo Eleitor (Voltar ao Início)
+              Voltar ao Início
             </Button>
           </div>
         ) : !showPinPad ? (
