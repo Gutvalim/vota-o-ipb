@@ -57,22 +57,16 @@ export default function Admin() {
   const [selectedParticipants, setSelectedParticipants] = useState<string[]>([]);
 
   const [voterCountToGenerate, setVoterCountToGenerate] = useState<number | string>(1);
+  
+  // A lista de impressão não será limpa automaticamente para evitar bugs no mobile
   const [printingVoters, setPrintingVoters] = useState<Voter[]>([]);
   const [searchVoter, setSearchVoter] = useState('');
   
-  // NOVO: Controle do Modal de Faltantes
+  // Controle do Modal de Faltantes
   const [showPendingModal, setShowPendingModal] = useState(false);
 
   const [authMode, setAuthMode] = useState<'pin' | 'code'>('pin');
   const [customPin, setCustomPin] = useState('4321');
-
-  useEffect(() => {
-    const handleAfterPrint = () => {
-      setPrintingVoters([]);
-    };
-    window.addEventListener('afterprint', handleAfterPrint);
-    return () => window.removeEventListener('afterprint', handleAfterPrint);
-  }, []);
 
   if (!currentUser) {
     navigate('/login');
@@ -302,9 +296,10 @@ export default function Admin() {
     if (votersToPrint.length === 0) return;
     setPrintingVoters(votersToPrint);
     
+    // Tempo seguro para o DOM renderizar o QR Code antes da chamada nativa de impressão
     setTimeout(() => {
       window.print();
-    }, 600);
+    }, 800);
   };
 
   const sortedVoters = [...voters].sort((a, b) => b.createdAt - a.createdAt);
@@ -313,16 +308,22 @@ export default function Admin() {
   return (
     <>
       <style>{`
+        /* TÉCNICA DE ACESSIBILIDADE: Oculta visualmente, mas mantém no DOM para o celular renderizar perfeito */
         @media screen { 
           .print-container { 
-            position: fixed;
-            left: -9999px;
-            top: -9999px;
-            opacity: 0;
-            pointer-events: none;
-            z-index: -1;
+            position: absolute !important;
+            width: 1px !important;
+            height: 1px !important;
+            padding: 0 !important;
+            margin: -1px !important;
+            overflow: hidden !important;
+            clip: rect(0, 0, 0, 0) !important;
+            white-space: nowrap !important;
+            border: 0 !important;
           } 
         }
+
+        /* REGRAS DE IMPRESSÃO ESTritas */
         @media print {
           @page { 
             margin: 0; 
@@ -335,16 +336,17 @@ export default function Admin() {
             margin: 0 !important;
             padding: 0 !important;
           }
-          .no-print { display: none !important; }
+          .no-print { 
+            display: none !important; 
+          }
           .print-container {
-            position: relative !important;
-            left: 0 !important;
-            top: 0 !important;
-            opacity: 1 !important;
             display: block !important;
+            position: static !important;
             width: 58mm !important;
+            clip: auto !important;
+            overflow: visible !important;
+            height: auto !important;
             margin: 0 auto !important;
-            padding: 0 !important;
           }
           .ticket {
             width: 58mm !important;
@@ -485,7 +487,6 @@ export default function Admin() {
                 
                 <div className="flex-1 hidden sm:block"></div>
                 
-                {/* CORREÇÃO DO LAYOUT MOBILE: Grid Cols 2 para não vazar a caixa */}
                 <div className="grid grid-cols-2 sm:flex gap-2 w-full sm:w-auto mt-2 sm:mt-0">
                   <Button variant="outline" onClick={() => handlePrint(voters)} disabled={voters.length === 0} className="w-full border-blue-600 text-blue-600 hover:bg-blue-50 px-2 sm:px-4 text-xs sm:text-sm">
                     <Printer className="w-4 h-4 mr-1 md:mr-2" /> Imprimir<span className="hidden sm:inline">&nbsp;Todos</span>
@@ -509,7 +510,6 @@ export default function Admin() {
                     />
                   </div>
                   
-                  {/* BOTAO ESTÁTICO DE VER FALTANTES */}
                   {isVotingOpen && currentScrutiny?.authMode === 'code' && (
                     <Button 
                       variant="secondary" 
@@ -809,7 +809,7 @@ export default function Admin() {
         </main>
       </div>
 
-      {/* JANELA DE CÓDIGOS PENDENTES (SÓ APARECE QUANDO CLICADA) */}
+      {/* JANELA DE CÓDIGOS PENDENTES */}
       {showPendingModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-[100] no-print">
           <Card className="w-full max-w-md shadow-2xl flex flex-col max-h-[85vh]">
@@ -837,7 +837,7 @@ export default function Admin() {
               </div>
             </CardContent>
             <div className="p-4 border-t shrink-0">
-              <Button className="w-full bg-navy" onClick={() => setShowPendingModal(false)}>
+              <Button className="w-full bg-navy hover:bg-navy-light text-primary-foreground" onClick={() => setShowPendingModal(false)}>
                 Fechar Janela
               </Button>
             </div>
@@ -845,7 +845,7 @@ export default function Admin() {
         </div>
       )}
 
-      {/* MÓDULO DE IMPRESSÃO (BLINDADO) */}
+      {/* MÓDULO DE IMPRESSÃO BLINDADO */}
       {printingVoters.length > 0 && (
         <div className="print-container font-sans text-black bg-white">
           {printingVoters.map((v, index) => (
