@@ -58,6 +58,9 @@ export default function Urna() {
   const [authInput, setAuthInput] = useState('');
   const [isScanning, setIsScanning] = useState(false);
   
+  // Estado ponte para receber o código da câmera e validar com segurança
+  const [cameraResult, setCameraResult] = useState<string | null>(null);
+  
   // Impede que o sistema tente ler a URL mais de uma vez e trave com mensagens duplicadas
   const [urlCodeProcessed, setUrlCodeProcessed] = useState(false);
 
@@ -87,25 +90,31 @@ export default function Urna() {
     setUrlCodeProcessed(false); // Se a pessoa ficou na tela até o próximo turno, permite ler a URL de novo
   }
 
-  // Leitura Automática da URL (A Mágica do QR Code impresso)
+  // 1. Leitura Automática da URL (Acesso direto pelo papel)
   useEffect(() => {
-    // Pega o que está escrito depois do "?codigo=" na barra de endereços
     const params = new URLSearchParams(window.location.search);
     const urlCode = params.get('codigo');
 
-    // Se o código estiver lá, a votação estiver aberta, for o modo celular, e ele ainda não votou...
     if (isOpen && authMode === 'code' && !authenticatedCode && !hasVoted && !urlCodeProcessed && urlCode) {
-      // Confirma que o banco de dados já carregou para não dar erro falso
       if (state.voters && state.voters.length > 0) {
-        setUrlCodeProcessed(true); // Marca como processado
-        handleValidateVoterCode(urlCode); // Autentica automaticamente!
+        setUrlCodeProcessed(true);
+        handleValidateVoterCode(urlCode);
       }
     }
   }, [isOpen, authMode, authenticatedCode, hasVoted, urlCodeProcessed, state.voters]);
 
-  // Câmera abre direto na lente traseira (environment) para quem prefere escanear na tela
+  // 2. Validador do resultado da Câmera (Roda logo após a câmera ser fechada)
   useEffect(() => {
-    let html5QrCode: Html5Qrcode;
+    if (cameraResult) {
+      handleValidateVoterCode(cameraResult);
+      setCameraResult(null); // limpa o estado após validar
+    }
+  }, [cameraResult]);
+
+  // 3. Sistema de Câmera Interna (Blindado contra URLs longas)
+  useEffect(() => {
+    let html5QrCode: Html5Qrcode | null = null;
+    let isMounted = true;
 
     if (isScanning) {
       html5QrCode = new Html5Qrcode("qr-reader");
@@ -117,33 +126,41 @@ export default function Urna() {
           qrbox: { width: 250, height: 250 }
         },
         (decodedText) => {
-          // Se ler algo da tela e tiver URL inteira, arranca só o código do final
+          if (!isMounted) return;
+          
           let finalCode = decodedText;
-          if (decodedText.includes('?codigo=')) {
-            finalCode = decodedText.split('?codigo=')[1];
+          
+          // Se ler a URL nova gigante, "recorta" só o código do final
+          if (decodedText.includes('codigo=')) {
+            finalCode = decodedText.split('codigo=')[1];
           }
+          
+          // Garante de forma absoluta que só sobram os 6 números (remove barras, espaços, etc)
+          finalCode = finalCode.replace(/\D/g, '');
 
-          if (html5QrCode.isScanning) {
-            html5QrCode.stop().then(() => {
-              html5QrCode.clear();
-              setIsScanning(false);
-              handleValidateVoterCode(finalCode);
-            }).catch(e => console.error(e));
-          }
+          // Em vez de desligar a câmera aqui dentro (o que causa crash no React),
+          // avisamos o estado. O cleanup do useEffect cuida de desligar fisicamente a lente.
+          setCameraResult(finalCode);
+          setIsScanning(false);
         },
         (errorMessage) => {
-          // Ignora erros de frame contínuo
+          // Ignora mensagens de erro contínuas de frame vazio
         }
       ).catch((err) => {
-        console.error(err);
-        toast.error("Erro ao acessar a câmera. Verifique as permissões do navegador.");
-        setIsScanning(false);
+        if (isMounted) {
+          console.error(err);
+          toast.error("Erro ao acessar a câmera. Verifique as permissões do navegador.");
+          setIsScanning(false);
+        }
       });
     }
 
     return () => {
+      isMounted = false;
       if (html5QrCode && html5QrCode.isScanning) {
-        html5QrCode.stop().then(() => html5QrCode.clear()).catch(e => console.error(e));
+        html5QrCode.stop().then(() => {
+          html5QrCode?.clear();
+        }).catch(e => console.error(e));
       }
     };
   }, [isScanning]);
@@ -288,7 +305,7 @@ export default function Urna() {
             </p>
 
             {isScanning ? (
-              <div className="w-full mb-4">
+              <div className="w-full mb-4 flex flex-col items-center">
                 <div id="qr-reader" className="w-full overflow-hidden rounded-xl border-2 border-gold/50 bg-black min-h-[250px]"></div>
                 <Button variant="ghost" onClick={() => setIsScanning(false)} className="mt-4 text-primary-foreground w-full py-6">
                   Cancelar Leitura da Câmera
