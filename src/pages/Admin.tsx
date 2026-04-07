@@ -297,17 +297,69 @@ export default function Admin() {
     }
   };
 
-  // AQUI É A MÁGICA FINAL:
+  // =======================================================================
+  // A MÁGICA HÍBRIDA (Desktop vs Mobile) PARA A IMPRESSÃO
+  // =======================================================================
   const handlePrint = (votersToPrint: Voter[]) => {
     if (votersToPrint.length === 0) return;
-    setPrintingVoters(votersToPrint);
-    
-    // Como a técnica do CSS (clip-path) força o celular a renderizar o SVG imediatamente
-    // como prioridade máxima, só precisamos de um tempo curtíssimo (150ms) 
-    // para o React anexar o HTML. Esse tempo é seguro e NÃO ativa o bloqueio de pop-up móvel!
-    setTimeout(() => {
-      window.print();
-    }, 150);
+
+    // Detecta se é celular (largura de tela menor que 768px ou User Agent)
+    const isMobile = window.innerWidth <= 768 || /Mobi|Android/i.test(navigator.userAgent);
+
+    if (isMobile) {
+      // 1. ABRE A ABA SINCRONAMENTE NO EXATO MILISSEGUNDO DO CLIQUE (Dribla o Safari/Chrome)
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) {
+        toast.error("O navegador bloqueou a nova aba. Permita pop-ups.");
+        return;
+      }
+
+      // 2. Coloca os eleitores no State para o React desenhar o SVG na DOM invisível
+      setPrintingVoters(votersToPrint);
+
+      // 3. Aguarda 300ms para o React desenhar as imagens invisíveis, captura e injeta na nova aba limpa
+      setTimeout(() => {
+        const container = document.querySelector('.print-container');
+        if (container) {
+          printWindow.document.write(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+              <title>Tickets IPB</title>
+              <style>
+                @page { margin: 0; size: 58mm auto; }
+                body { font-family: sans-serif; background: white; margin: 0; padding: 0; color: black; }
+                .ticket { width: 58mm; padding: 5mm; text-align: center; box-sizing: border-box; page-break-after: always; margin: 0 auto; }
+                .ticket:last-child { page-break-after: auto; }
+                h2 { font-size: 14px; margin: 0; font-weight: bold; }
+                p { margin: 0; }
+                svg { max-width: 100%; height: auto; }
+              </style>
+            </head>
+            <body>
+              ${container.innerHTML}
+              <script>
+                // Dispara a impressão na aba limpa e focada
+                setTimeout(() => {
+                  window.print();
+                }, 500);
+              </script>
+            </body>
+            </html>
+          `);
+          printWindow.document.close();
+        }
+        // Limpa o React local após exportar
+        setPrintingVoters([]);
+      }, 300);
+
+    } else {
+      // É COMPUTADOR (Não tem bloqueio de popup rigoroso)
+      setPrintingVoters(votersToPrint);
+      setTimeout(() => {
+        window.print();
+      }, 600);
+    }
   };
 
   const sortedVoters = [...voters].sort((a, b) => b.createdAt - a.createdAt);
@@ -316,54 +368,25 @@ export default function Admin() {
   return (
     <>
       <style>{`
-        /* TÉCNICA DE ACESSIBILIDADE OFICIAL:
-           O elemento fica visualmente invisível, MAS o navegador considera que 
-           ele está no meio da tela (viewport) e renderiza seu conteúdo (o QRCode) 
-           com prioridade máxima. */
+        /* Mantém renderizado, mas invisível para capturarmos o HTML */
         @media screen { 
           .print-container { 
-            position: absolute !important;
-            width: 1px !important;
-            height: 1px !important;
-            padding: 0 !important;
-            margin: -1px !important;
-            overflow: hidden !important;
-            clip: rect(0, 0, 0, 0) !important;
-            white-space: nowrap !important;
-            border: 0 !important;
+            position: fixed;
+            left: -9999px;
+            top: -9999px;
+            opacity: 0;
+            pointer-events: none;
+            z-index: -1;
           } 
         }
 
-        /* REGRAS DE IMPRESSÃO - Transforma a "caixa minúscula" no ticket real de 58mm */
+        /* Regras apenas para a versão Desktop, o Mobile usa a aba limpa injetada */
         @media print {
-          @page { 
-            margin: 0; 
-            size: 58mm auto; 
-          }
-          html, body {
-            height: auto !important;
-            overflow: visible !important;
-            background: white !important;
-            margin: 0 !important;
-            padding: 0 !important;
-          }
+          @page { margin: 0; size: 58mm auto; }
+          html, body { height: auto !important; overflow: visible !important; background: white !important; margin: 0 !important; padding: 0 !important; }
           .no-print { display: none !important; }
-          .print-container {
-            display: block !important;
-            position: static !important;
-            width: 58mm !important;
-            clip: auto !important;
-            overflow: visible !important;
-            height: auto !important;
-            margin: 0 auto !important;
-            padding: 0 !important;
-          }
-          .ticket {
-            width: 58mm !important;
-            padding: 5mm !important;
-            text-align: center;
-            box-sizing: border-box;
-          }
+          .print-container { position: relative !important; left: 0 !important; top: 0 !important; opacity: 1 !important; display: block !important; width: 58mm !important; margin: 0 auto !important; padding: 0 !important; }
+          .ticket { width: 58mm !important; padding: 5mm !important; text-align: center; box-sizing: border-box; }
         }
       `}</style>
 
@@ -855,7 +878,7 @@ export default function Admin() {
         </div>
       )}
 
-      {/* MÓDULO DE IMPRESSÃO - COM URL EMBUTIDA E TÉCNICA CLIP-PATH */}
+      {/* MÓDULO DE IMPRESSÃO - COM URL EMBUTIDA */}
       {printingVoters.length > 0 && (
         <div className="print-container font-sans text-black bg-white">
           {printingVoters.map((v, index) => (
@@ -876,7 +899,6 @@ export default function Admin() {
               </div>
               
               <div style={{display:'flex', justifyContent:'center', margin:'10px 0'}}>
-                {/* Aqui a mágica acontece: o QR Code com link direto. */}
                 <QRCodeSVG value={`https://vota.ipbnb.com.br/urna?codigo=${v.code}`} size={140} level="M" />
               </div>
               
