@@ -61,12 +61,17 @@ export default function Admin() {
   const [searchVoter, setSearchVoter] = useState('');
   
   const [showPendingModal, setShowPendingModal] = useState(false);
-  
-  // NOVO: Controle do Modal de Impressão (Resolve o bloqueio do celular)
-  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
 
   const [authMode, setAuthMode] = useState<'pin' | 'code'>('pin');
   const [customPin, setCustomPin] = useState('4321');
+
+  useEffect(() => {
+    const handleAfterPrint = () => {
+      setPrintingVoters([]);
+    };
+    window.addEventListener('afterprint', handleAfterPrint);
+    return () => window.removeEventListener('afterprint', handleAfterPrint);
+  }, []);
 
   if (!currentUser) {
     navigate('/login');
@@ -292,11 +297,15 @@ export default function Admin() {
     }
   };
 
-  // AGORA a impressão não usa setTimeout. Ela apenas prepara os dados e abre a janela
+  // Aqui resolvemos o bloqueio: 400ms ignora o bloqueio do celular, 
+  // mas deixa o React terminar de criar o SVG na DOM invisível.
   const handlePrint = (votersToPrint: Voter[]) => {
     if (votersToPrint.length === 0) return;
     setPrintingVoters(votersToPrint);
-    setIsPrintModalOpen(true);
+    
+    setTimeout(() => {
+      window.print();
+    }, 400);
   };
 
   const sortedVoters = [...voters].sort((a, b) => b.createdAt - a.createdAt);
@@ -305,19 +314,17 @@ export default function Admin() {
   return (
     <>
       <style>{`
-        /* CSS QUE FUNCIONA NO SEU TESTE - Joga o ticket pra fora da tela, mas mantém renderizado */
+        /* CSS que mantém o QR Code renderizado pro mobile conseguir ler, mas fora da tela */
         @media screen { 
           .print-container { 
             position: fixed;
             left: -9999px;
-            top: 0;
+            top: -9999px;
             opacity: 0;
             pointer-events: none;
             z-index: -1;
           } 
         }
-
-        /* REGRAS DE IMPRESSÃO */
         @media print {
           @page { 
             margin: 0; 
@@ -838,33 +845,7 @@ export default function Admin() {
         </div>
       )}
 
-      {/* NOVO: MODAL DE IMPRESSÃO - A Solução Definitiva para Mobile */}
-      {isPrintModalOpen && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-[200] no-print">
-          <Card className="w-full max-w-sm shadow-2xl text-center flex flex-col items-center p-6 border-2 border-blue-500/50">
-            <Printer className="w-16 h-16 text-blue-500 mb-4 animate-pulse" />
-            <h2 className="text-2xl font-bold mb-2">Pronto para Imprimir</h2>
-            <p className="text-muted-foreground mb-6">
-              {printingVoters.length} código(s) processado(s).
-            </p>
-            <Button
-              className="w-full bg-blue-600 hover:bg-blue-700 text-lg py-6 mb-3 font-bold"
-              onClick={() => window.print()}
-            >
-              ABRIR IMPRESSORA AGORA
-            </Button>
-            <Button 
-              variant="ghost" 
-              className="text-muted-foreground"
-              onClick={() => { setIsPrintModalOpen(false); setPrintingVoters([]); }}
-            >
-              Concluído / Cancelar
-            </Button>
-          </Card>
-        </div>
-      )}
-
-      {/* MÓDULO DE IMPRESSÃO (NOVA URL COM CÓDIGO) */}
+      {/* MÓDULO DE IMPRESSÃO (INVISÍVEL NA TELA, VISÍVEL NO PAPEL) */}
       {printingVoters.length > 0 && (
         <div className="print-container font-sans text-black bg-white">
           {printingVoters.map((v, index) => (
@@ -885,7 +866,6 @@ export default function Admin() {
               </div>
               
               <div style={{display:'flex', justifyContent:'center', margin:'10px 0'}}>
-                {/* O QR Code com a URL Completa! */}
                 <QRCodeSVG value={`https://vota.ipbnb.com.br/urna?codigo=${v.code}`} size={140} level="M" />
               </div>
               
