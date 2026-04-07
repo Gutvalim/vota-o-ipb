@@ -297,15 +297,17 @@ export default function Admin() {
     }
   };
 
-  // Aqui resolvemos o bloqueio: 400ms ignora o bloqueio do celular, 
-  // mas deixa o React terminar de criar o SVG na DOM invisível.
+  // AQUI É A MÁGICA FINAL:
   const handlePrint = (votersToPrint: Voter[]) => {
     if (votersToPrint.length === 0) return;
     setPrintingVoters(votersToPrint);
     
+    // Como a técnica do CSS (clip-path) força o celular a renderizar o SVG imediatamente
+    // como prioridade máxima, só precisamos de um tempo curtíssimo (150ms) 
+    // para o React anexar o HTML. Esse tempo é seguro e NÃO ativa o bloqueio de pop-up móvel!
     setTimeout(() => {
       window.print();
-    }, 400);
+    }, 150);
   };
 
   const sortedVoters = [...voters].sort((a, b) => b.createdAt - a.createdAt);
@@ -314,17 +316,25 @@ export default function Admin() {
   return (
     <>
       <style>{`
-        /* CSS que mantém o QR Code renderizado pro mobile conseguir ler, mas fora da tela */
+        /* TÉCNICA DE ACESSIBILIDADE OFICIAL:
+           O elemento fica visualmente invisível, MAS o navegador considera que 
+           ele está no meio da tela (viewport) e renderiza seu conteúdo (o QRCode) 
+           com prioridade máxima. */
         @media screen { 
           .print-container { 
-            position: fixed;
-            left: -9999px;
-            top: -9999px;
-            opacity: 0;
-            pointer-events: none;
-            z-index: -1;
+            position: absolute !important;
+            width: 1px !important;
+            height: 1px !important;
+            padding: 0 !important;
+            margin: -1px !important;
+            overflow: hidden !important;
+            clip: rect(0, 0, 0, 0) !important;
+            white-space: nowrap !important;
+            border: 0 !important;
           } 
         }
+
+        /* REGRAS DE IMPRESSÃO - Transforma a "caixa minúscula" no ticket real de 58mm */
         @media print {
           @page { 
             margin: 0; 
@@ -339,12 +349,12 @@ export default function Admin() {
           }
           .no-print { display: none !important; }
           .print-container {
-            position: relative !important;
-            left: 0 !important;
-            top: 0 !important;
-            opacity: 1 !important;
             display: block !important;
+            position: static !important;
             width: 58mm !important;
+            clip: auto !important;
+            overflow: visible !important;
+            height: auto !important;
             margin: 0 auto !important;
             padding: 0 !important;
           }
@@ -845,7 +855,7 @@ export default function Admin() {
         </div>
       )}
 
-      {/* MÓDULO DE IMPRESSÃO (INVISÍVEL NA TELA, VISÍVEL NO PAPEL) */}
+      {/* MÓDULO DE IMPRESSÃO - COM URL EMBUTIDA E TÉCNICA CLIP-PATH */}
       {printingVoters.length > 0 && (
         <div className="print-container font-sans text-black bg-white">
           {printingVoters.map((v, index) => (
@@ -866,6 +876,7 @@ export default function Admin() {
               </div>
               
               <div style={{display:'flex', justifyContent:'center', margin:'10px 0'}}>
+                {/* Aqui a mágica acontece: o QR Code com link direto. */}
                 <QRCodeSVG value={`https://vota.ipbnb.com.br/urna?codigo=${v.code}`} size={140} level="M" />
               </div>
               
