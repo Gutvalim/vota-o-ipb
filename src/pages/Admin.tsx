@@ -82,6 +82,7 @@ export default function Admin() {
   const isVotingOpen = currentScrutiny?.status === 'open';
   const pendingUsers = users.filter(u => !u.approved);
   const voters = state.voters || [];
+
   const votedCodesList = currentScrutiny?.votedCodes || [];
 
   const handleSaveElection = (field: string, value: string | number) => {
@@ -300,9 +301,10 @@ export default function Admin() {
     if (votersToPrint.length === 0) return;
     setPrintingVoters(votersToPrint);
     
+    // Atraso sutil para o celular montar a DOM do QR code antes de puxar o driver de impressão
     setTimeout(() => {
       window.print();
-    }, 800);
+    }, 600);
   };
 
   const sortedVoters = [...voters].sort((a, b) => b.createdAt - a.createdAt);
@@ -311,17 +313,15 @@ export default function Admin() {
   return (
     <>
       <style>{`
+        /* CSS QUE FUNCIONOU NO SEU TESTE - Esconde apenas jogando a div para longe da tela, mantendo a integridade para os renderizadores móveis */
         @media screen { 
           .print-container { 
-            position: absolute !important;
-            width: 1px !important;
-            height: 1px !important;
-            padding: 0 !important;
-            margin: -1px !important;
-            overflow: hidden !important;
-            clip: rect(0, 0, 0, 0) !important;
-            white-space: nowrap !important;
-            border: 0 !important;
+            position: fixed;
+            left: -9999px;
+            top: -9999px;
+            opacity: 0;
+            pointer-events: none;
+            z-index: -1;
           } 
         }
         @media print {
@@ -338,12 +338,12 @@ export default function Admin() {
           }
           .no-print { display: none !important; }
           .print-container {
+            position: relative !important;
+            left: 0 !important;
+            top: 0 !important;
+            opacity: 1 !important;
             display: block !important;
-            position: static !important;
             width: 58mm !important;
-            clip: auto !important;
-            overflow: visible !important;
-            height: auto !important;
             margin: 0 auto !important;
             padding: 0 !important;
           }
@@ -865,7 +865,6 @@ export default function Admin() {
               </div>
               
               <div style={{display:'flex', justifyContent:'center', margin:'10px 0'}}>
-                {/* Aqui a mágica acontece: o QR Code agora é um link direto! Nível M para não borrar na térmica */}
                 <QRCodeSVG value={`https://vota.ipbnb.com.br/urna?codigo=${v.code}`} size={140} level="M" />
               </div>
               
