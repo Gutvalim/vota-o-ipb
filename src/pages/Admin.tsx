@@ -298,7 +298,7 @@ export default function Admin() {
   };
 
   // =======================================================================
-  // A MÁGICA HÍBRIDA (Desktop vs Mobile) PARA A IMPRESSÃO
+  // A MÁGICA HÍBRIDA FINAL COM BOTÃO DE FALLBACK PARA O MOBILE
   // =======================================================================
   const handlePrint = (votersToPrint: Voter[]) => {
     if (votersToPrint.length === 0) return;
@@ -307,54 +307,104 @@ export default function Admin() {
     const isMobile = window.innerWidth <= 768 || /Mobi|Android/i.test(navigator.userAgent);
 
     if (isMobile) {
-      // 1. ABRE A ABA SINCRONAMENTE NO EXATO MILISSEGUNDO DO CLIQUE (Dribla o Safari/Chrome)
+      // 1. ABRE A ABA SINCRONAMENTE NO EXATO MILISSEGUNDO DO CLIQUE
       const printWindow = window.open('', '_blank');
       if (!printWindow) {
         toast.error("O navegador bloqueou a nova aba. Permita pop-ups.");
         return;
       }
 
-      // 2. Coloca os eleitores no State para o React desenhar o SVG na DOM invisível
+      // 2. Coloca os eleitores no State para o React desenhar o SVG
       setPrintingVoters(votersToPrint);
 
-      // 3. Aguarda 300ms para o React desenhar as imagens invisíveis, captura e injeta na nova aba limpa
+      // 3. Aguarda desenhar e injeta na nova aba
       setTimeout(() => {
         const container = document.querySelector('.print-container');
         if (container) {
           printWindow.document.write(`
             <!DOCTYPE html>
-            <html>
+            <html lang="pt-BR">
             <head>
-              <title>Tickets IPB</title>
+              <meta charset="UTF-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <title>Imprimir Tickets IPB</title>
               <style>
                 @page { margin: 0; size: 58mm auto; }
                 body { font-family: sans-serif; background: white; margin: 0; padding: 0; color: black; }
+                
+                /* Estilo do Botão Gigante de Impressão */
+                .print-btn-wrapper {
+                  padding: 20px;
+                  text-align: center;
+                  background-color: #f1f5f9;
+                  border-bottom: 2px dashed #cbd5e1;
+                  margin-bottom: 20px;
+                }
+                .print-btn {
+                  background-color: #2563eb;
+                  color: white;
+                  border: none;
+                  padding: 16px 24px;
+                  font-size: 20px;
+                  font-weight: bold;
+                  border-radius: 12px;
+                  width: 100%;
+                  max-width: 300px;
+                  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+                }
+                .print-btn:active { background-color: #1d4ed8; }
+
+                /* Estilo do Ticket */
+                .ticket-area { display: flex; flex-direction: column; align-items: center; }
                 .ticket { width: 58mm; padding: 5mm; text-align: center; box-sizing: border-box; page-break-after: always; margin: 0 auto; }
                 .ticket:last-child { page-break-after: auto; }
                 h2 { font-size: 14px; margin: 0; font-weight: bold; }
                 p { margin: 0; }
                 svg { max-width: 100%; height: auto; }
+
+                /* ESCONDE O BOTÃO NA HORA DE SAIR NO PAPEL */
+                @media print {
+                  .print-btn-wrapper { display: none !important; }
+                  body { background: white; }
+                }
               </style>
             </head>
             <body>
-              ${container.innerHTML}
+              <div class="print-btn-wrapper">
+                <button class="print-btn" onclick="window.print()">🖨️ IMPRIMIR AGORA</button>
+                <p style="margin-top: 10px; font-size: 14px; color: #64748b;">Se a tela não abriu sozinha, toque no botão acima.</p>
+              </div>
+              
+              <div class="ticket-area">
+                ${container.innerHTML}
+              </div>
+
               <script>
-                // Dispara a impressão na aba limpa e focada
-                setTimeout(() => {
-                  window.print();
-                }, 500);
+                // Tenta forçar a impressão automática quando a página terminar de carregar
+                window.onload = function() {
+                  setTimeout(function() {
+                    window.print();
+                  }, 500);
+                };
               </script>
             </body>
             </html>
           `);
           printWindow.document.close();
+          
+          // Tenta acionar a impressão a partir da aba pai (Funciona em alguns Androids)
+          setTimeout(() => {
+            printWindow.focus();
+            printWindow.print();
+          }, 800);
         }
+        
         // Limpa o React local após exportar
         setPrintingVoters([]);
       }, 300);
 
     } else {
-      // É COMPUTADOR (Não tem bloqueio de popup rigoroso)
+      // É COMPUTADOR (Não tem bloqueio de popup)
       setPrintingVoters(votersToPrint);
       setTimeout(() => {
         window.print();
@@ -878,7 +928,7 @@ export default function Admin() {
         </div>
       )}
 
-      {/* MÓDULO DE IMPRESSÃO - COM URL EMBUTIDA */}
+      {/* MÓDULO DE IMPRESSÃO (INVISÍVEL NA TELA, VISÍVEL NO PAPEL) */}
       {printingVoters.length > 0 && (
         <div className="print-container font-sans text-black bg-white">
           {printingVoters.map((v, index) => (
