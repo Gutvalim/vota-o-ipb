@@ -9,7 +9,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
-import { QRCodeSVG } from 'qrcode.react';
+// IMPORTANTE: Adicionamos o QRCodeCanvas para gerar imagens no mobile
+import { QRCodeSVG, QRCodeCanvas } from 'qrcode.react';
 import {
   ArrowLeft, Plus, Trash2, Play, Square, AlertTriangle, Users, Award, RotateCcw, UserPlus, LogOut, CheckCircle2, XCircle, ShieldCheck, Eye, QrCode, Printer, Smartphone, Tablet, Search
 } from 'lucide-react';
@@ -298,29 +299,61 @@ export default function Admin() {
   };
 
   // =======================================================================
-  // A MÁGICA HÍBRIDA FINAL COM BOTÃO DE FALLBACK PARA O MOBILE
+  // A SOLUÇÃO DEFINITIVA (GERADOR DE IMAGEM PARA CELULAR)
   // =======================================================================
   const handlePrint = (votersToPrint: Voter[]) => {
     if (votersToPrint.length === 0) return;
 
-    // Detecta se é celular (largura de tela menor que 768px ou User Agent)
-    const isMobile = window.innerWidth <= 768 || /Mobi|Android/i.test(navigator.userAgent);
+    // O "Radar" de celular
+    const isMobile = window.innerWidth <= 768 || /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
 
     if (isMobile) {
-      // 1. ABRE A ABA SINCRONAMENTE NO EXATO MILISSEGUNDO DO CLIQUE
+      // 1. Abre a aba no MESMO milissegundo (Dribla o bloqueio)
       const printWindow = window.open('', '_blank');
       if (!printWindow) {
-        toast.error("O navegador bloqueou a nova aba. Permita pop-ups.");
+        toast.error("O navegador bloqueou a nova aba. Permita pop-ups no seu celular.");
         return;
       }
 
-      // 2. Coloca os eleitores no State para o React desenhar o SVG
+      // 2. Coloca os eleitores no Estado para o React desenhar o Canvas
       setPrintingVoters(votersToPrint);
 
-      // 3. Aguarda desenhar e injeta na nova aba
+      // 3. Dá tempo pro React desenhar, captura as imagens e joga na aba limpa
       setTimeout(() => {
         const container = document.querySelector('.print-container');
         if (container) {
+          
+          // A Mágica da Imagem: Pega o canvas e transforma em <img src="base64">
+          const ticketsHtml = Array.from(container.querySelectorAll('.ticket')).map(ticketEl => {
+            const code = ticketEl.getAttribute('data-code');
+            const canvas = ticketEl.querySelector('canvas');
+            const imgData = canvas ? canvas.toDataURL('image/png') : '';
+            
+            return `
+              <div class="ticket" style="page-break-after: always;">
+                <h2 style="font-size:14px; margin:0; font-weight: bold;">IPB NOVA BRASÍLIA</h2>
+                <p style="font-size:10px; margin:2px 0 10px; font-weight: bold;">ASSEMBLEIA EXTRAORDINÁRIA</p>
+                
+                <div style="border-top:1px dashed #000; border-bottom:1px dashed #000; padding:10px 0; margin:10px 0;">
+                  <span style="font-size:10px; font-weight: bold;">CÓDIGO DE ACESSO</span>
+                  <div style="font-size:36px; font-weight:bold; font-family:monospace;">${code}</div>
+                </div>
+                
+                <div style="display:flex; justify-content:center; margin:10px 0;">
+                  <img src="${imgData}" width="140" height="140" style="display:block; margin:0 auto;" />
+                </div>
+                
+                <p style="font-size:10px; line-height:1.2; margin-top: 10px;">
+                  Aponte a câmera do celular para este<br/>QR Code e a urna abrirá sozinha.
+                </p>
+                <p style="font-size:8px; opacity:0.6; margin-top: 5px;">
+                  Uso único e intransferível.
+                </p>
+              </div>
+            `;
+          }).join('');
+
+          // 4. Constrói o HTML puro da aba nova
           printWindow.document.write(`
             <!DOCTYPE html>
             <html lang="pt-BR">
@@ -332,7 +365,7 @@ export default function Admin() {
                 @page { margin: 0; size: 58mm auto; }
                 body { font-family: sans-serif; background: white; margin: 0; padding: 0; color: black; }
                 
-                /* Estilo do Botão Gigante de Impressão */
+                /* Estilo do Botão Gigante de Imprimir */
                 .print-btn-wrapper {
                   padding: 20px;
                   text-align: center;
@@ -351,18 +384,18 @@ export default function Admin() {
                   width: 100%;
                   max-width: 300px;
                   box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+                  cursor: pointer;
                 }
                 .print-btn:active { background-color: #1d4ed8; }
 
-                /* Estilo do Ticket */
+                /* Estilo da Folha de Impressão */
                 .ticket-area { display: flex; flex-direction: column; align-items: center; }
-                .ticket { width: 58mm; padding: 5mm; text-align: center; box-sizing: border-box; page-break-after: always; margin: 0 auto; }
-                .ticket:last-child { page-break-after: auto; }
-                h2 { font-size: 14px; margin: 0; font-weight: bold; }
-                p { margin: 0; }
-                svg { max-width: 100%; height: auto; }
-
-                /* ESCONDE O BOTÃO NA HORA DE SAIR NO PAPEL */
+                .ticket { width: 58mm; padding: 5mm; text-align: center; box-sizing: border-box; margin: 0 auto; }
+                
+                /* Remove a quebra de página do último ticket pra não gastar papel à toa */
+                .ticket:last-child { page-break-after: auto !important; }
+                
+                /* O Segredo: Tudo que estiver no Wrapper do Botão SOME na hora da impressão real */
                 @media print {
                   .print-btn-wrapper { display: none !important; }
                   body { background: white; }
@@ -372,15 +405,16 @@ export default function Admin() {
             <body>
               <div class="print-btn-wrapper">
                 <button class="print-btn" onclick="window.print()">🖨️ IMPRIMIR AGORA</button>
-                <p style="margin-top: 10px; font-size: 14px; color: #64748b;">Se a tela não abriu sozinha, toque no botão acima.</p>
+                <p style="margin-top: 10px; font-size: 14px; color: #64748b;">Toque no botão azul acima para enviar à impressora térmica.</p>
               </div>
               
               <div class="ticket-area">
-                ${container.innerHTML}
+                ${ticketsHtml}
               </div>
 
               <script>
-                // Tenta forçar a impressão automática quando a página terminar de carregar
+                // Tenta chamar sozinho por comodidade. 
+                // Se o celular bloquear, o botão acima garante o funcionamento.
                 window.onload = function() {
                   setTimeout(function() {
                     window.print();
@@ -391,24 +425,17 @@ export default function Admin() {
             </html>
           `);
           printWindow.document.close();
-          
-          // Tenta acionar a impressão a partir da aba pai (Funciona em alguns Androids)
-          setTimeout(() => {
-            printWindow.focus();
-            printWindow.print();
-          }, 800);
         }
-        
-        // Limpa o React local após exportar
+        // Esvazia a memória do React após jogar pra aba nova
         setPrintingVoters([]);
       }, 300);
 
     } else {
-      // É COMPUTADOR (Não tem bloqueio de popup)
+      // É COMPUTADOR: Não mexemos no que já funciona perfeitamente!
       setPrintingVoters(votersToPrint);
       setTimeout(() => {
         window.print();
-      }, 600);
+      }, 400);
     }
   };
 
@@ -418,7 +445,7 @@ export default function Admin() {
   return (
     <>
       <style>{`
-        /* Mantém renderizado, mas invisível para capturarmos o HTML */
+        /* A div oculta oficial! Escondida em PCs e Celulares, usada só pra gerar a imagem Base64. */
         @media screen { 
           .print-container { 
             position: fixed;
@@ -430,7 +457,7 @@ export default function Admin() {
           } 
         }
 
-        /* Regras apenas para a versão Desktop, o Mobile usa a aba limpa injetada */
+        /* Regras apenas para Desktop (Já que mobile vai usar a aba nova). */
         @media print {
           @page { margin: 0; size: 58mm auto; }
           html, body { height: auto !important; overflow: visible !important; background: white !important; margin: 0 !important; padding: 0 !important; }
@@ -928,13 +955,14 @@ export default function Admin() {
         </div>
       )}
 
-      {/* MÓDULO DE IMPRESSÃO (INVISÍVEL NA TELA, VISÍVEL NO PAPEL) */}
+      {/* MÓDULO DE IMPRESSÃO INVISÍVEL - USADO PARA GERAR AS IMAGENS BASE64 */}
       {printingVoters.length > 0 && (
         <div className="print-container font-sans text-black bg-white">
           {printingVoters.map((v, index) => (
             <div 
               key={v.code} 
               className="ticket"
+              data-code={v.code}
               style={{ 
                 pageBreakAfter: index === printingVoters.length - 1 ? 'auto' : 'always',
                 breakInside: 'avoid'
@@ -949,7 +977,8 @@ export default function Admin() {
               </div>
               
               <div style={{display:'flex', justifyContent:'center', margin:'10px 0'}}>
-                <QRCodeSVG value={`https://vota.ipbnb.com.br/urna?codigo=${v.code}`} size={140} level="M" />
+                {/* O QRCodeCanvas desenha os pixels reais em vez de usar SVG */}
+                <QRCodeCanvas value={`https://vota.ipbnb.com.br/urna?codigo=${v.code}`} size={140} level="M" />
               </div>
               
               <p style={{fontSize:'10px', lineHeight:'1.2', marginTop: '10px'}}>
