@@ -222,7 +222,7 @@ export default function Admin() {
   };
 
   const handleRestartScrutiny = (scrutinyId: string) => {
-    if (confirm('Atenção: Isso vai APAGAR TODOS os votos computados neste escrutínio e reabrir a votação! Deseja continuar?')) {
+    if (confirm('Atenção: Isto vai APAGAR TODOS os votos computados neste escrutínio e reabrir a votação! Deseja continuar?')) {
       dispatch({ type: 'RESTART_SCRUTINY', payload: scrutinyId });
       toast.info('O escrutínio foi reiniciado e as urnas reabertas.');
     }
@@ -283,7 +283,7 @@ export default function Admin() {
   };
 
   const handleClearVoters = () => {
-    if (confirm('ATENÇÃO: Isso apagará TODOS os códigos gerados. Eleitores não poderão votar se seus códigos forem apagados. Continuar?')) {
+    if (confirm('ATENÇÃO: Isto apagará TODOS os códigos gerados. Eleitores não poderão votar se os seus códigos forem apagados. Continuar?')) {
       dispatch({ type: 'CLEAR_VOTERS' } as any);
       toast.info('Todos os códigos de eleitores foram apagados.');
     }
@@ -301,10 +301,10 @@ export default function Admin() {
     if (votersToPrint.length === 0) return;
     setPrintingVoters(votersToPrint);
     
-    // Atraso sutil para o celular montar a DOM do QR code antes de puxar o driver de impressão
+    // Aumentado para 1000ms (1 segundo) para garantir que o telemóvel tem tempo de processar a URL no SVG antes de invocar a impressão
     setTimeout(() => {
       window.print();
-    }, 600);
+    }, 1000);
   };
 
   const sortedVoters = [...voters].sort((a, b) => b.createdAt - a.createdAt);
@@ -313,7 +313,6 @@ export default function Admin() {
   return (
     <>
       <style>{`
-        /* CSS QUE FUNCIONOU NO SEU TESTE - Esconde apenas jogando a div para longe da tela, mantendo a integridade para os renderizadores móveis */
         @media screen { 
           .print-container { 
             position: fixed;
@@ -865,11 +864,12 @@ export default function Admin() {
               </div>
               
               <div style={{display:'flex', justifyContent:'center', margin:'10px 0'}}>
+                {/* Aqui a mágica acontece: o QR Code agora é um link direto! Nível M para não borrar na térmica */}
                 <QRCodeSVG value={`https://vota.ipbnb.com.br/urna?codigo=${v.code}`} size={140} level="M" />
               </div>
               
               <p style={{fontSize:'10px', lineHeight:'1.2', marginTop: '10px'}}>
-                Aponte a câmera do celular para este<br/>QR Code e a urna abrirá sozinha.
+                Aponte a câmara do telemóvel para este<br/>QR Code e a urna abrirá sozinha.
               </p>
               <p style={{fontSize:'8px', opacity:0.6, marginTop: '5px'}}>
                 Uso único e intransferível.
