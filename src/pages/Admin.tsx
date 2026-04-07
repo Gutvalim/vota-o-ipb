@@ -57,9 +57,12 @@ export default function Admin() {
   const [selectedParticipants, setSelectedParticipants] = useState<string[]>([]);
 
   const [voterCountToGenerate, setVoterCountToGenerate] = useState<number | string>(1);
+  
+  // A lista de impressão não será limpa automaticamente para evitar bugs no mobile
   const [printingVoters, setPrintingVoters] = useState<Voter[]>([]);
   const [searchVoter, setSearchVoter] = useState('');
   
+  // Controle do Modal de Faltantes
   const [showPendingModal, setShowPendingModal] = useState(false);
 
   const [authMode, setAuthMode] = useState<'pin' | 'code'>('pin');
@@ -222,7 +225,7 @@ export default function Admin() {
   };
 
   const handleRestartScrutiny = (scrutinyId: string) => {
-    if (confirm('Atenção: Isto vai APAGAR TODOS os votos computados neste escrutínio e reabrir a votação! Deseja continuar?')) {
+    if (confirm('Atenção: Isso vai APAGAR TODOS os votos computados neste escrutínio e reabrir a votação! Deseja continuar?')) {
       dispatch({ type: 'RESTART_SCRUTINY', payload: scrutinyId });
       toast.info('O escrutínio foi reiniciado e as urnas reabertas.');
     }
@@ -283,7 +286,7 @@ export default function Admin() {
   };
 
   const handleClearVoters = () => {
-    if (confirm('ATENÇÃO: Isto apagará TODOS os códigos gerados. Eleitores não poderão votar se os seus códigos forem apagados. Continuar?')) {
+    if (confirm('ATENÇÃO: Isso apagará TODOS os códigos gerados. Eleitores não poderão votar se seus códigos forem apagados. Continuar?')) {
       dispatch({ type: 'CLEAR_VOTERS' } as any);
       toast.info('Todos os códigos de eleitores foram apagados.');
     }
@@ -301,10 +304,10 @@ export default function Admin() {
     if (votersToPrint.length === 0) return;
     setPrintingVoters(votersToPrint);
     
-    // Aumentado para 1000ms (1 segundo) para garantir que o telemóvel tem tempo de processar a URL no SVG antes de invocar a impressão
+    // Tempo seguro para o DOM renderizar o QR Code antes da chamada nativa de impressão
     setTimeout(() => {
       window.print();
-    }, 1000);
+    }, 800);
   };
 
   const sortedVoters = [...voters].sort((a, b) => b.createdAt - a.createdAt);
@@ -313,6 +316,7 @@ export default function Admin() {
   return (
     <>
       <style>{`
+        /* TÉCNICA DE ACESSIBILIDADE: Oculta visualmente que funcionou no seu teste */
         @media screen { 
           .print-container { 
             position: fixed;
@@ -323,6 +327,8 @@ export default function Admin() {
             z-index: -1;
           } 
         }
+
+        /* REGRAS DE IMPRESSÃO ESTritas */
         @media print {
           @page { 
             margin: 0; 
@@ -337,12 +343,12 @@ export default function Admin() {
           }
           .no-print { display: none !important; }
           .print-container {
-            position: relative !important;
-            left: 0 !important;
-            top: 0 !important;
-            opacity: 1 !important;
             display: block !important;
+            position: static !important;
             width: 58mm !important;
+            clip: auto !important;
+            overflow: visible !important;
+            height: auto !important;
             margin: 0 auto !important;
             padding: 0 !important;
           }
@@ -869,7 +875,7 @@ export default function Admin() {
               </div>
               
               <p style={{fontSize:'10px', lineHeight:'1.2', marginTop: '10px'}}>
-                Aponte a câmara do telemóvel para este<br/>QR Code e a urna abrirá sozinha.
+                Aponte a câmera do celular para este<br/>QR Code e a urna abrirá sozinha.
               </p>
               <p style={{fontSize:'8px', opacity:0.6, marginTop: '5px'}}>
                 Uso único e intransferível.
