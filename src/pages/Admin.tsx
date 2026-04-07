@@ -58,11 +58,9 @@ export default function Admin() {
 
   const [voterCountToGenerate, setVoterCountToGenerate] = useState<number | string>(1);
   
-  // A lista de impressão não será limpa automaticamente para evitar bugs no mobile
   const [printingVoters, setPrintingVoters] = useState<Voter[]>([]);
   const [searchVoter, setSearchVoter] = useState('');
   
-  // Controle do Modal de Faltantes
   const [showPendingModal, setShowPendingModal] = useState(false);
 
   const [authMode, setAuthMode] = useState<'pin' | 'code'>('pin');
@@ -304,10 +302,11 @@ export default function Admin() {
     if (votersToPrint.length === 0) return;
     setPrintingVoters(votersToPrint);
     
-    // Tempo seguro para o DOM renderizar o QR Code antes da chamada nativa de impressão
+    // Tempo seguro e curto (200ms). Evita o bloqueio do Safari/Chrome 
+    // mas dá tempo suficiente pro React atualizar a DOM
     setTimeout(() => {
       window.print();
-    }, 800);
+    }, 200);
   };
 
   const sortedVoters = [...voters].sort((a, b) => b.createdAt - a.createdAt);
@@ -316,7 +315,6 @@ export default function Admin() {
   return (
     <>
       <style>{`
-        /* TÉCNICA DE ACESSIBILIDADE: Oculta visualmente que funcionou no seu teste */
         @media screen { 
           .print-container { 
             position: fixed;
@@ -327,8 +325,6 @@ export default function Admin() {
             z-index: -1;
           } 
         }
-
-        /* REGRAS DE IMPRESSÃO ESTritas */
         @media print {
           @page { 
             margin: 0; 
@@ -343,12 +339,12 @@ export default function Admin() {
           }
           .no-print { display: none !important; }
           .print-container {
+            position: relative !important;
+            left: 0 !important;
+            top: 0 !important;
+            opacity: 1 !important;
             display: block !important;
-            position: static !important;
             width: 58mm !important;
-            clip: auto !important;
-            overflow: visible !important;
-            height: auto !important;
             margin: 0 auto !important;
             padding: 0 !important;
           }
@@ -849,7 +845,7 @@ export default function Admin() {
         </div>
       )}
 
-      {/* MÓDULO DE IMPRESSÃO (NOVA URL COM CÓDIGO) */}
+      {/* MÓDULO DE IMPRESSÃO BLINDADO COM URL MAGICA E TEMPO CURTO */}
       {printingVoters.length > 0 && (
         <div className="print-container font-sans text-black bg-white">
           {printingVoters.map((v, index) => (
@@ -870,7 +866,6 @@ export default function Admin() {
               </div>
               
               <div style={{display:'flex', justifyContent:'center', margin:'10px 0'}}>
-                {/* Aqui a mágica acontece: o QR Code agora é um link direto! Nível M para não borrar na térmica */}
                 <QRCodeSVG value={`https://vota.ipbnb.com.br/urna?codigo=${v.code}`} size={140} level="M" />
               </div>
               
