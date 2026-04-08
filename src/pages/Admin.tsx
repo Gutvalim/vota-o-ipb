@@ -9,8 +9,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
-// Importamos SOMENTE o Canvas para blindar a memória do mobile
-import { QRCodeCanvas } from 'qrcode.react';
+// Importação necessária para gerar os QRCodes
+import { QRCodeSVG } from 'qrcode.react';
 import {
   ArrowLeft, Plus, Trash2, Play, Square, AlertTriangle, Users, Award, RotateCcw, UserPlus, LogOut, CheckCircle2, XCircle, ShieldCheck, Eye, QrCode, Printer, Smartphone, Tablet, Search
 } from 'lucide-react';
@@ -57,24 +57,13 @@ export default function Admin() {
   const [startingScrutinyType, setStartingScrutinyType] = useState<ScrutinyType | null>(null);
   const [selectedParticipants, setSelectedParticipants] = useState<string[]>([]);
 
+  // Estados para o Gerenciamento de Eleitores (QRCodes)
   const [voterCountToGenerate, setVoterCountToGenerate] = useState<number | string>(1);
-  
-  // A lista de impressão
   const [printingVoters, setPrintingVoters] = useState<Voter[]>([]);
   const [searchVoter, setSearchVoter] = useState('');
-  
   const [showPendingModal, setShowPendingModal] = useState(false);
-
   const [authMode, setAuthMode] = useState<'pin' | 'code'>('pin');
   const [customPin, setCustomPin] = useState('4321');
-
-  useEffect(() => {
-    const handleAfterPrint = () => {
-      setPrintingVoters([]);
-    };
-    window.addEventListener('afterprint', handleAfterPrint);
-    return () => window.removeEventListener('afterprint', handleAfterPrint);
-  }, []);
 
   if (!currentUser) {
     navigate('/login');
@@ -85,7 +74,6 @@ export default function Admin() {
   const isVotingOpen = currentScrutiny?.status === 'open';
   const pendingUsers = users.filter(u => !u.approved);
   const voters = state.voters || [];
-
   const votedCodesList = currentScrutiny?.votedCodes || [];
 
   const handleSaveElection = (field: string, value: string | number) => {
@@ -105,11 +93,13 @@ export default function Admin() {
         const MAX_HEIGHT = 300;
         let width = img.width;
         let height = img.height;
+
         if (width > height) {
           if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; }
         } else {
           if (height > MAX_HEIGHT) { width *= MAX_HEIGHT / height; height = MAX_HEIGHT; }
         }
+
         canvas.width = width;
         canvas.height = height;
         const ctx = canvas.getContext('2d');
@@ -161,6 +151,7 @@ export default function Admin() {
       if (lastScrutiny) {
         eligibleCandidates = eligibleCandidates.filter(c => lastScrutiny.participatingCandidateIds.includes(c.id));
       }
+
       if (nextRound >= 3 && lastScrutiny) {
         const sortedFromLast = Object.entries(lastScrutiny.votes)
           .filter(([id]) => lastScrutiny.participatingCandidateIds.includes(id) && !alreadyElected.includes(id))
@@ -171,19 +162,22 @@ export default function Admin() {
             if (!ca || !cb) return 0;
             return new Date(ca.birthDate).getTime() - new Date(cb.birthDate).getTime();
           });
+          
         const funnelCount = remainingSlots * 2;
         const funnelIds = sortedFromLast.slice(0, funnelCount).map(([id]) => id);
         eligibleCandidates = eligibleCandidates.filter(c => funnelIds.includes(c.id));
       }
+      
       initialSelected = eligibleCandidates.map(c => c.id);
     }
+
     setSelectedParticipants(initialSelected);
     setStartingScrutinyType(type);
     setAuthMode('pin'); 
     setCustomPin('4321');
   };
 
-  const handleConfirmStartScrutiny = async () => {
+  const handleConfirmStartScrutiny = () => {
     if (!startingScrutinyType) return;
     if (selectedParticipants.length === 0) {
       toast.error('Selecione pelo menos um candidato');
@@ -197,24 +191,21 @@ export default function Admin() {
       toast.error('Não há eleitores cadastrados. Vá na aba Gerenciar Eleitores primeiro.');
       return;
     }
+    
     const existingRounds = state.scrutinies.filter(s => s.type === startingScrutinyType).length;
-    try {
-      await dispatch({
-        type: 'START_SCRUTINY',
-        payload: { 
-          type: startingScrutinyType, 
-          round: existingRounds + 1, 
-          participatingCandidateIds: selectedParticipants,
-          authMode: authMode,
-          pin: authMode === 'pin' ? customPin : ""
-        },
-      });
-      toast.success(`Votação iniciada no modo: ${authMode === 'pin' ? 'Tablet/Mesário' : 'Celular (QR Code)'}`);
-      setStartingScrutinyType(null);
-      setSelectedParticipants([]);
-    } catch (error: any) {
-      toast.error("Falha ao iniciar escrutínio no servidor: " + error.message);
-    }
+    dispatch({
+      type: 'START_SCRUTINY',
+      payload: { 
+        type: startingScrutinyType, 
+        round: existingRounds + 1, 
+        participatingCandidateIds: selectedParticipants,
+        authMode: authMode,
+        pin: authMode === 'pin' ? customPin : ""
+      },
+    });
+    toast.success(`Votação iniciada — ${existingRounds + 1}º escrutínio`);
+    setStartingScrutinyType(null);
+    setSelectedParticipants([]);
   };
 
   const handleCloseScrutiny = () => {
@@ -237,7 +228,7 @@ export default function Admin() {
   };
 
   const handleReset = () => {
-    if (confirm('Tem certeza que deseja resetar toda a eleição? Os candidatos e códigos serão mantidos, mas os resultados zerados.')) {
+    if (confirm('Tem certeza que deseja resetar toda a eleição? Os candidatos serão mantidos, mas os votos e vagas serão zerados.')) {
       dispatch({ type: 'RESET' });
       toast.info('Eleição resetada.');
     }
@@ -264,6 +255,7 @@ export default function Admin() {
     return { remainingSlots, nextRound, alreadyElected };
   };
 
+  // Funções de Gerenciamento de Eleitores (QRCodes)
   const handleGenerateVoters = () => {
     const count = parseInt(voterCountToGenerate.toString());
     if (isNaN(count) || count <= 0 || count > 500) {
@@ -300,20 +292,20 @@ export default function Admin() {
     }
   };
 
-  // =======================================================================
-  // A ARQUITETURA ORIGINAL DE IMPRESSÃO (Simples, Síncrona, Mesma Página)
-  // =======================================================================
   const handlePrint = (votersToPrint: Voter[]) => {
-    if (votersToPrint.length === 0) return;
+    if (votersToPrint.length === 0) {
+      toast.info("Não há códigos para imprimir.");
+      return;
+    }
     
-    // Alimenta o estado para o React renderizar
+    // Alimenta o estado com os eleitores. O React vai injetar a div invisível.
     setPrintingVoters(votersToPrint);
     
-    // O tempo seguro que você atestou funcionar. 
-    // Como agora é Canvas, não haverá estouro de memória no celular.
+    // Como a div invisível não usa display:none, o React renderiza rápido.
+    // Damos um tempo muito curto apenas para a DOM atualizar, evitando que o celular ache que é um pop-up.
     setTimeout(() => {
       window.print();
-    }, 800);
+    }, 150);
   };
 
   const sortedVoters = [...voters].sort((a, b) => b.createdAt - a.createdAt);
@@ -322,7 +314,8 @@ export default function Admin() {
   return (
     <>
       <style>{`
-        /* CSS que você testou e validou na primeira versão */
+        /* TÉCNICA DE ACESSIBILIDADE OFICIAL E COMPROVADA */
+        /* Mantém o elemento na DOM para o React gerar rápido, mas invisível ao usuário */
         @media screen { 
           .print-container { 
             position: absolute !important;
@@ -337,8 +330,12 @@ export default function Admin() {
           } 
         }
 
+        /* REGRAS DE IMPRESSÃO */
         @media print {
-          @page { margin: 0; size: 58mm auto; }
+          @page { 
+            margin: 0; 
+            size: 58mm auto; 
+          }
           html, body {
             height: auto !important;
             overflow: visible !important;
@@ -437,29 +434,15 @@ export default function Admin() {
               </CardTitle>
             </CardHeader>
             <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              <div>
-                <Label>Título da Eleição</Label>
-                <SyncInput value={state.title || ''} onChange={(val: string) => handleSaveElection('title', val)} />
-              </div>
-              <div>
-                <Label>Data</Label>
-                <SyncInput type="date" value={state.date || ''} onChange={(val: string) => handleSaveElection('date', val)} />
-              </div>
-              <div>
-                <Label>Meta de Votantes (Opcional)</Label>
-                <SyncInput type="number" min={0} value={state.voterGoal?.toString() || ''} onChange={(val: string) => handleSaveElection('voterGoal', parseInt(val) || 0)} />
-              </div>
-              <div>
-                <Label>Vagas Presbíteros</Label>
-                <SyncInput type="number" min={0} value={state.presbyterSlots?.toString() || ''} onChange={(val: string) => handleSaveElection('presbyterSlots', parseInt(val) || 0)} />
-              </div>
-              <div>
-                <Label>Vagas Diáconos</Label>
-                <SyncInput type="number" min={0} value={state.deaconSlots?.toString() || ''} onChange={(val: string) => handleSaveElection('deaconSlots', parseInt(val) || 0)} />
-              </div>
+              <div><Label>Título da Eleição</Label><SyncInput value={state.title} onChange={(v: string) => handleSaveElection('title', v)} /></div>
+              <div><Label>Data</Label><SyncInput type="date" value={state.date} onChange={(v: string) => handleSaveElection('date', v)} /></div>
+              <div><Label>Meta de Votantes (Quórum)</Label><SyncInput type="number" min={0} value={state.voterGoal?.toString() || ''} onChange={(v: string) => handleSaveElection('voterGoal', parseInt(v) || 0)} /></div>
+              <div><Label>Vagas Presbíteros</Label><SyncInput type="number" min={0} value={state.presbyterSlots?.toString() || ''} onChange={(v: string) => handleSaveElection('presbyterSlots', parseInt(v) || 0)} /></div>
+              <div><Label>Vagas Diáconos</Label><SyncInput type="number" min={0} value={state.deaconSlots?.toString() || ''} onChange={(v: string) => handleSaveElection('deaconSlots', parseInt(v) || 0)} /></div>
             </CardContent>
           </Card>
 
+          {/* MÓDULO GERENCIAR ELEITORES (CÓDIGOS E QRCODES) */}
           <Card className="border-blue-900 border-2">
             <CardHeader className="bg-blue-900/5 pb-4">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -664,6 +647,8 @@ export default function Admin() {
                       );
                     })()}
                   </div>
+                  
+                  {/* OPÇÕES DE MODO DE URNA ADICIONADAS */}
                   <div className="space-y-4 bg-background p-4 rounded-lg border">
                     <h4 className="font-bold text-md flex items-center gap-2">
                       <ShieldCheck className="w-5 h-5 text-gold" />
@@ -711,6 +696,7 @@ export default function Admin() {
                       </div>
                     </div>
                   </div>
+
                   <div className="grid gap-2 sm:grid-cols-2">
                     {state.candidates.filter(c => !((startingScrutinyType === 'presbitero' ? state.electedPresbyters : state.electedDeacons).includes(c.id))).map(c => {
                         const isSelected = selectedParticipants.includes(c.id);
@@ -854,7 +840,7 @@ export default function Admin() {
         </div>
       )}
 
-      {/* MÓDULO DE IMPRESSÃO (USANDO CANVAS) */}
+      {/* MÓDULO DE IMPRESSÃO ONDE INSERIMOS A URL DIRETA E NÍVEL DE CORREÇÃO 'M' */}
       {printingVoters.length > 0 && (
         <div className="print-container font-sans text-black bg-white">
           {printingVoters.map((v, index) => (
@@ -875,8 +861,8 @@ export default function Admin() {
               </div>
               
               <div style={{display:'flex', justifyContent:'center', margin:'10px 0'}}>
-                {/* A CURA PARA A MEMÓRIA DO CELULAR */}
-                <QRCodeCanvas value={`https://vota.ipbnb.com.br/urna?codigo=${v.code}`} size={140} level="M" />
+                {/* Aqui está o pulo do gato: A URL mágica com level M para evitar colapso de SVG no celular */}
+                <QRCodeSVG value={`https://vota.ipbnb.com.br/urna?codigo=${v.code}`} size={140} level="M" />
               </div>
               
               <p style={{fontSize:'10px', lineHeight:'1.2', marginTop: '10px'}}>
