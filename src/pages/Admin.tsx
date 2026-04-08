@@ -9,9 +9,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
-import { QRCodeSVG } from 'qrcode.react';
+// Importação segura para a memória do celular
+import { QRCodeSVG, QRCodeCanvas } from 'qrcode.react';
 import {
-  ArrowLeft, Plus, Trash2, Play, Square, AlertTriangle, Users, Award, RotateCcw, UserPlus, LogOut, CheckCircle2, XCircle, ShieldCheck, Eye, QrCode, Printer, Smartphone, Tablet, Search, UserMinus
+  ArrowLeft, Plus, Trash2, Play, Square, AlertTriangle, Users, Award, RotateCcw, UserPlus, LogOut, CheckCircle2, XCircle, ShieldCheck, Eye, QrCode, Printer, Smartphone, Tablet, Search, UserMinus, Settings
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -47,7 +48,7 @@ function SyncInput({ value, onChange, ...props }: any) {
 
 export default function Admin() {
   const { state, dispatch } = useElection();
-  // Pegamos o deleteUser (caso exista) ou usamos o rejectUser como fallback para exclusão
+  // Incluindo o deleteUser do contexto (ou usando rejectUser como fallback)
   const { currentUser, users, logout, approveUser, rejectUser, deleteUser } = useAuth() as any;
   const navigate = useNavigate();
 
@@ -62,17 +63,24 @@ export default function Admin() {
   const [searchVoter, setSearchVoter] = useState('');
   
   const [showPendingModal, setShowPendingModal] = useState(false);
+  
+  // Controle do novo Modal de Gerenciar Usuários
+  const [showManageUsersModal, setShowManageUsersModal] = useState(false);
+
+  // Modo de Impressão para Celular
+  const [isPrintingMode, setIsPrintingMode] = useState(false);
 
   const [authMode, setAuthMode] = useState<'pin' | 'code'>('pin');
   const [customPin, setCustomPin] = useState('4321');
 
   useEffect(() => {
     const handleAfterPrint = () => {
-      setPrintingVoters([]);
+      // Limpa os tickets da memória apenas se estiver no PC
+      if (!isPrintingMode) setPrintingVoters([]);
     };
     window.addEventListener('afterprint', handleAfterPrint);
     return () => window.removeEventListener('afterprint', handleAfterPrint);
-  }, []);
+  }, [isPrintingMode]);
 
   if (!currentUser) {
     navigate('/login');
@@ -82,27 +90,25 @@ export default function Admin() {
   const currentScrutiny = state.scrutinies.find(s => s.id === state.currentScrutinyId);
   const isVotingOpen = currentScrutiny?.status === 'open';
   
-  // Divisão de usuários (Pendentes vs Aprovados)
   const pendingUsers = users.filter((u: any) => !u.approved);
   const approvedUsers = users.filter((u: any) => u.approved && u.username !== currentUser.username);
-
+  
   const voters = state.voters || [];
   const votedCodesList = currentScrutiny?.votedCodes || [];
 
-  // Função para remover um usuário aprovado do sistema
+  const handleSaveElection = (field: string, value: string | number) => {
+    dispatch({ type: 'SET_ELECTION', payload: { [field]: value } });
+  };
+
   const handleRemoveUser = (username: string) => {
     if (confirm(`Tem certeza que deseja REVOGAR O ACESSO do usuário '${username}'?`)) {
       if (deleteUser) {
         deleteUser(username);
       } else {
-        rejectUser(username); // Fallback para deletar
+        rejectUser(username);
       }
       toast.info(`Acesso de ${username} removido.`);
     }
-  };
-
-  const handleSaveElection = (field: string, value: string | number) => {
-    dispatch({ type: 'SET_ELECTION', payload: { [field]: value } });
   };
 
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -314,89 +320,23 @@ export default function Admin() {
   };
 
   // =======================================================================
-  // A ABORDAGEM DE NOVA ABA COM IMPRESSÃO MANUAL (MOBILE)
+  // A IMPRESSÃO SÍNCRONA LIMPA (Com tela de fallback pro mobile)
   // =======================================================================
   const handlePrint = (votersToPrint: Voter[]) => {
     if (votersToPrint.length === 0) return;
 
     const isMobile = window.innerWidth <= 768 || /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+    setPrintingVoters(votersToPrint);
 
     if (isMobile) {
-      // Abre a aba síncrona imediatamente para driblar bloqueadores
-      // IMPORTANTE: Se o navegador não abrir nada, o bloqueador de pop-ups está bloqueando até cliques manuais.
-      const printWindow = window.open('', '_blank');
-      
-      if (!printWindow) {
-        toast.error("Pop-up bloqueado! Permita pop-ups nas configurações do seu navegador para imprimir.", { duration: 6000 });
-        return;
-      }
-
-      setPrintingVoters(votersToPrint);
-
-      // Espera 500ms para o React gerar os QRCodes e injeta na nova aba
+      // No celular, trocamos a tela. A própria tela nova fará a impressão com segurança.
+      setIsPrintingMode(true);
+      // Disparo automático suave para facilitar
       setTimeout(() => {
-        const container = document.querySelector('.print-container');
-        if (container) {
-          printWindow.document.write(`
-            <!DOCTYPE html>
-            <html lang="pt-BR">
-            <head>
-              <meta charset="UTF-8">
-              <meta name="viewport" content="width=device-width, initial-scale=1.0">
-              <title>Imprimir Tickets IPB</title>
-              <style>
-                @page { margin: 0; size: 58mm auto; }
-                body { font-family: sans-serif; background: white; margin: 0; padding: 10px; color: black; }
-                
-                /* Instrução visual para o usuário */
-                .instruction-box {
-                  background-color: #f8fafc;
-                  border: 2px dashed #94a3b8;
-                  border-radius: 12px;
-                  padding: 20px;
-                  text-align: center;
-                  margin-bottom: 20px;
-                }
-                .instruction-box h3 { margin-top: 0; color: #0f172a; }
-                .instruction-box p { color: #334155; font-size: 14px; margin-bottom: 0; }
-
-                /* Estilo da Folha de Impressão */
-                .ticket-area { display: flex; flex-direction: column; align-items: center; }
-                .ticket { width: 58mm; padding: 5mm; text-align: center; box-sizing: border-box; margin: 0 auto; page-break-after: always; }
-                .ticket:last-child { page-break-after: auto !important; }
-                
-                h2 { font-size: 14px; margin: 0; font-weight: bold; }
-                p { margin: 0; }
-                svg { max-width: 100%; height: auto; }
-
-                /* Esconde as instruções na hora de sair no papel */
-                @media print {
-                  .instruction-box { display: none !important; }
-                  body { padding: 0; }
-                }
-              </style>
-            </head>
-            <body>
-              <div class="instruction-box">
-                <h3>🖨️ Página Pronta para Impressão</h3>
-                <p>Para imprimir, abra o menu do seu navegador (três pontinhos) e escolha <strong>"Imprimir"</strong> ou <strong>"Compartilhar > Imprimir"</strong>.</p>
-              </div>
-              
-              <div class="ticket-area">
-                ${container.innerHTML}
-              </div>
-            </body>
-            </html>
-          `);
-          printWindow.document.close();
-        }
-        
-        setPrintingVoters([]);
-      }, 500);
-
+        window.print();
+      }, 800);
     } else {
-      // É COMPUTADOR (Método silencioso automático)
-      setPrintingVoters(votersToPrint);
+      // PC: A técnica invisível funciona 100%
       setTimeout(() => {
         window.print();
       }, 800);
@@ -406,25 +346,102 @@ export default function Admin() {
   const sortedVoters = [...voters].sort((a, b) => b.createdAt - a.createdAt);
   const filteredVoters = sortedVoters.filter(v => v.code.includes(searchVoter));
 
+  // =======================================================================
+  // TELA DE IMPRESSÃO EXCLUSIVA DO MOBILE
+  // =======================================================================
+  if (isPrintingMode) {
+    return (
+      <div className="bg-white min-h-screen font-sans text-black">
+        <style>{`
+          @media print {
+            @page { margin: 0; size: 58mm auto; }
+            body { background: white !important; margin: 0; padding: 0; }
+            .no-print { display: none !important; }
+            .ticket { width: 58mm !important; padding: 5mm !important; text-align: center; box-sizing: border-box; page-break-after: always; margin: 0 auto; }
+            .ticket:last-child { page-break-after: auto !important; }
+          }
+        `}</style>
+        
+        {/* Header fixo com instruções e botões */}
+        <div className="no-print bg-slate-50 p-4 border-b border-slate-200 flex flex-col items-center sticky top-0 z-50 shadow-sm">
+          <p className="text-slate-600 mb-4 text-center font-medium">
+            Se a janela de impressão não abrir sozinha, clique no botão abaixo.
+          </p>
+          
+          <Button 
+            onClick={() => window.print()} 
+            className="w-full max-w-sm bg-blue-600 hover:bg-blue-700 text-white text-xl py-6 mb-3 font-bold shadow-md"
+          >
+            🖨️ IMPRIMIR AGORA
+          </Button>
+          
+          <Button 
+            variant="ghost" 
+            onClick={() => { setIsPrintingMode(false); setPrintingVoters([]); }} 
+            className="w-full max-w-sm text-slate-500 font-bold"
+          >
+            Cancelar e Voltar
+          </Button>
+        </div>
+        
+        {/* A Área dos Tickets na Tela Cheia */}
+        <div className="flex flex-col items-center py-4 bg-white">
+          {printingVoters.map((v, index) => (
+            <div 
+              key={v.code} 
+              className="ticket" 
+              style={{ 
+                width: '58mm', 
+                padding: '5mm', 
+                textAlign: 'center', 
+                boxSizing: 'border-box',
+                margin: '0 auto',
+                pageBreakAfter: index === printingVoters.length - 1 ? 'auto' : 'always',
+                borderBottom: index === printingVoters.length - 1 ? 'none' : '1px dashed #ccc' 
+              }}
+            >
+              <h2 style={{fontSize:'14px', margin:0, fontWeight: 'bold', color: 'black'}}>IPB NOVA BRASÍLIA</h2>
+              <p style={{fontSize:'10px', margin:'2px 0 10px', fontWeight: 'bold', color: 'black'}}>ASSEMBLEIA EXTRAORDINÁRIA</p>
+              
+              <div style={{borderTop:'1px dashed #000', borderBottom:'1px dashed #000', padding:'10px 0', margin:'10px 0'}}>
+                <span style={{fontSize:'10px', fontWeight: 'bold', color: 'black'}}>CÓDIGO DE ACESSO</span>
+                <div style={{fontSize:'36px', fontWeight:'bold', fontFamily:'monospace', color: 'black'}}>{v.code}</div>
+              </div>
+              
+              <div style={{display:'flex', justifyContent:'center', margin:'10px 0'}}>
+                {/* CANVAS É OBRIGATÓRIO AQUI PARA BLINDAR A MEMÓRIA DO MOBILE */}
+                <QRCodeCanvas value={`https://vota.ipbnb.com.br/urna?codigo=${v.code}`} size={140} level="M" />
+              </div>
+              
+              <p style={{fontSize:'10px', lineHeight:'1.2', marginTop: '10px', color: 'black'}}>
+                Aponte a câmera do celular para este<br/>QR Code e a urna abrirá sozinha.
+              </p>
+              <p style={{fontSize:'8px', opacity:0.6, marginTop: '5px', color: 'black'}}>
+                Uso único e intransferível.
+              </p>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // =======================================================================
+  // PAINEL DE ADMINISTRAÇÃO NORMAL
+  // =======================================================================
   return (
     <>
       <style>{`
-        /* Mantém renderizado para gerar o HTML, mas invisível */
         @media screen { 
           .print-container { 
-            position: absolute !important;
-            width: 1px !important;
-            height: 1px !important;
-            padding: 0 !important;
-            margin: -1px !important;
-            overflow: hidden !important;
-            clip: rect(0, 0, 0, 0) !important;
-            white-space: nowrap !important;
-            border: 0 !important;
+            position: fixed;
+            left: -9999px;
+            top: -9999px;
+            opacity: 0;
+            pointer-events: none;
+            z-index: -1;
           } 
         }
-
-        /* Regras apenas para a impressão do PC */
         @media print {
           @page { margin: 0; size: 58mm auto; }
           html, body { height: auto !important; overflow: visible !important; background: white !important; margin: 0 !important; padding: 0 !important; }
@@ -486,31 +503,18 @@ export default function Admin() {
             </Card>
           )}
 
-          {/* NOVO MÓDULO: GERENCIAR USUÁRIOS APROVADOS */}
+          {/* NOVO: BOTÃO ELEGANTE PARA GERENCIAR ACESSOS (Abre Modal) */}
           {currentUser.isAdmin && approvedUsers.length > 0 && (
-            <Card className="border-destructive/30">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-lg">
-                  <Users className="w-5 h-5 text-destructive" />
-                  Gerenciar Acessos (Usuários Aprovados)
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  {approvedUsers.map((u: any) => (
-                    <div key={u.username} className="flex items-center justify-between p-3 rounded-lg border bg-card">
-                      <div className="flex flex-col">
-                        <span className="font-semibold">{u.username}</span>
-                        {u.isAdmin && <Badge variant="secondary" className="w-fit mt-1 text-[10px]">Administrador</Badge>}
-                      </div>
-                      <Button size="sm" variant="outline" className="border-destructive text-destructive hover:bg-destructive/10" onClick={() => handleRemoveUser(u.username)}>
-                        <UserMinus className="w-4 h-4 mr-1" /> Remover
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+            <div className="flex justify-end">
+               <Button 
+                 variant="outline" 
+                 onClick={() => setShowManageUsersModal(true)}
+                 className="border-slate-300 text-slate-700 hover:bg-slate-100"
+               >
+                 <Settings className="w-4 h-4 mr-2" />
+                 Gerenciar Acessos do Sistema
+               </Button>
+            </div>
           )}
 
           {state.alerts.length > 0 && (
@@ -915,7 +919,7 @@ export default function Admin() {
         </main>
       </div>
 
-      {/* JANELA DE CÓDIGOS PENDENTES */}
+      {/* JANELA: CÓDIGOS PENDENTES (Faltam Votar) */}
       {showPendingModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-[100] no-print">
           <Card className="w-full max-w-md shadow-2xl flex flex-col max-h-[85vh]">
@@ -951,8 +955,53 @@ export default function Admin() {
         </div>
       )}
 
-      {/* MÓDULO DE IMPRESSÃO (OCULTO NA TELA E RENDERIZADO NO PAPEL/ABA NOVA) */}
-      {printingVoters.length > 0 && (
+      {/* NOVO: JANELA DE GERENCIAR USUÁRIOS APROVADOS (MODAL) */}
+      {showManageUsersModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-[100] no-print">
+          <Card className="w-full max-w-md shadow-2xl flex flex-col max-h-[85vh]">
+            <CardHeader className="shrink-0 border-b pb-4 bg-slate-50">
+              <CardTitle className="text-xl flex items-center gap-2 text-slate-800">
+                <Settings className="w-5 h-5" /> Gerenciar Acessos
+              </CardTitle>
+              <p className="text-sm text-slate-500">
+                Remova mesários ou administradores que não devem mais ter acesso ao sistema.
+              </p>
+            </CardHeader>
+            <CardContent className="overflow-y-auto flex-1 p-4">
+              <div className="space-y-3">
+                {approvedUsers.map((u: any) => (
+                  <div key={u.username} className="flex items-center justify-between p-3 rounded-lg border bg-white shadow-sm">
+                    <div className="flex flex-col">
+                      <span className="font-bold text-slate-700">{u.username}</span>
+                      {u.isAdmin ? (
+                        <Badge variant="secondary" className="w-fit mt-1 text-[10px] bg-blue-100 text-blue-800 border-blue-200">Administrador</Badge>
+                      ) : (
+                        <Badge variant="outline" className="w-fit mt-1 text-[10px] text-slate-500">Mesário</Badge>
+                      )}
+                    </div>
+                    <Button 
+                      size="sm" 
+                      variant="outline" 
+                      className="border-red-200 text-red-600 hover:bg-red-50" 
+                      onClick={() => handleRemoveUser(u.username)}
+                    >
+                      <UserMinus className="w-4 h-4 mr-1" /> Remover
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+            <div className="p-4 border-t shrink-0 bg-slate-50">
+              <Button variant="outline" className="w-full" onClick={() => setShowManageUsersModal(false)}>
+                Fechar Janela
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* MÓDULO DE IMPRESSÃO (NO PC FICA INVISÍVEL, NO MOBILE FICA INVISÍVEL ATÉ TROCAR A TELA) */}
+      {!isPrintingMode && printingVoters.length > 0 && (
         <div className="print-container font-sans text-black bg-white">
           {printingVoters.map((v, index) => (
             <div 
@@ -972,8 +1021,8 @@ export default function Admin() {
               </div>
               
               <div style={{display:'flex', justifyContent:'center', margin:'10px 0'}}>
-                {/* NÍVEL "M" para evitar código muito denso e estourar impressão mobile */}
-                <QRCodeSVG value={`https://vota.ipbnb.com.br/urna?codigo=${v.code}`} size={140} level="M" />
+                {/* NÍVEL "M" E CANVAS PARA PROTEGER A MEMÓRIA DO CELULAR */}
+                <QRCodeCanvas value={`https://vota.ipbnb.com.br/urna?codigo=${v.code}`} size={140} level="M" />
               </div>
               
               <p style={{fontSize:'10px', lineHeight:'1.2', marginTop: '10px'}}>
