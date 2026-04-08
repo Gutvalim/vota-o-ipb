@@ -29,6 +29,7 @@ export interface Candidate {
 export interface Voter {
   code: string;
   createdAt: number;
+  tag?: string;
 }
 
 export type ScrutinyType = 'presbitero' | 'diacono';
