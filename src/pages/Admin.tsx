@@ -9,8 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
-// IMPORTANTE: Adicionamos o QRCodeCanvas para gerar imagens no mobile
-import { QRCodeSVG, QRCodeCanvas } from 'qrcode.react';
+import { QRCodeSVG } from 'qrcode.react';
 import {
   ArrowLeft, Plus, Trash2, Play, Square, AlertTriangle, Users, Award, RotateCcw, UserPlus, LogOut, CheckCircle2, XCircle, ShieldCheck, Eye, QrCode, Printer, Smartphone, Tablet, Search
 } from 'lucide-react';
@@ -62,17 +61,21 @@ export default function Admin() {
   const [searchVoter, setSearchVoter] = useState('');
   
   const [showPendingModal, setShowPendingModal] = useState(false);
+  
+  // NOVO: Modo de Impressão de Tela Cheia (A Solução Definitiva)
+  const [isPrintingMode, setIsPrintingMode] = useState(false);
 
   const [authMode, setAuthMode] = useState<'pin' | 'code'>('pin');
   const [customPin, setCustomPin] = useState('4321');
 
   useEffect(() => {
     const handleAfterPrint = () => {
-      setPrintingVoters([]);
+      // Limpa os eleitores da memória ao terminar (apenas no PC, o mobile usa o botão "Voltar")
+      if (!isPrintingMode) setPrintingVoters([]);
     };
     window.addEventListener('afterprint', handleAfterPrint);
     return () => window.removeEventListener('afterprint', handleAfterPrint);
-  }, []);
+  }, [isPrintingMode]);
 
   if (!currentUser) {
     navigate('/login');
@@ -299,140 +302,20 @@ export default function Admin() {
   };
 
   // =======================================================================
-  // A SOLUÇÃO DEFINITIVA (GERADOR DE IMAGEM PARA CELULAR)
+  // A ABORDAGEM "IN-PLACE VIEW" (Substituição de Tela na Mesma Aba)
   // =======================================================================
   const handlePrint = (votersToPrint: Voter[]) => {
     if (votersToPrint.length === 0) return;
 
-    // O "Radar" de celular
+    // Detecta se é celular
     const isMobile = window.innerWidth <= 768 || /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+    setPrintingVoters(votersToPrint);
 
     if (isMobile) {
-      // 1. Abre a aba no MESMO milissegundo (Dribla o bloqueio)
-      const printWindow = window.open('', '_blank');
-      if (!printWindow) {
-        toast.error("O navegador bloqueou a nova aba. Permita pop-ups no seu celular.");
-        return;
-      }
-
-      // 2. Coloca os eleitores no Estado para o React desenhar o Canvas
-      setPrintingVoters(votersToPrint);
-
-      // 3. Dá tempo pro React desenhar, captura as imagens e joga na aba limpa
-      setTimeout(() => {
-        const container = document.querySelector('.print-container');
-        if (container) {
-          
-          // A Mágica da Imagem: Pega o canvas e transforma em <img src="base64">
-          const ticketsHtml = Array.from(container.querySelectorAll('.ticket')).map(ticketEl => {
-            const code = ticketEl.getAttribute('data-code');
-            const canvas = ticketEl.querySelector('canvas');
-            const imgData = canvas ? canvas.toDataURL('image/png') : '';
-            
-            return `
-              <div class="ticket" style="page-break-after: always;">
-                <h2 style="font-size:14px; margin:0; font-weight: bold;">IPB NOVA BRASÍLIA</h2>
-                <p style="font-size:10px; margin:2px 0 10px; font-weight: bold;">ASSEMBLEIA EXTRAORDINÁRIA</p>
-                
-                <div style="border-top:1px dashed #000; border-bottom:1px dashed #000; padding:10px 0; margin:10px 0;">
-                  <span style="font-size:10px; font-weight: bold;">CÓDIGO DE ACESSO</span>
-                  <div style="font-size:36px; font-weight:bold; font-family:monospace;">${code}</div>
-                </div>
-                
-                <div style="display:flex; justify-content:center; margin:10px 0;">
-                  <img src="${imgData}" width="140" height="140" style="display:block; margin:0 auto;" />
-                </div>
-                
-                <p style="font-size:10px; line-height:1.2; margin-top: 10px;">
-                  Aponte a câmera do celular para este<br/>QR Code e a urna abrirá sozinha.
-                </p>
-                <p style="font-size:8px; opacity:0.6; margin-top: 5px;">
-                  Uso único e intransferível.
-                </p>
-              </div>
-            `;
-          }).join('');
-
-          // 4. Constrói o HTML puro da aba nova
-          printWindow.document.write(`
-            <!DOCTYPE html>
-            <html lang="pt-BR">
-            <head>
-              <meta charset="UTF-8">
-              <meta name="viewport" content="width=device-width, initial-scale=1.0">
-              <title>Imprimir Tickets IPB</title>
-              <style>
-                @page { margin: 0; size: 58mm auto; }
-                body { font-family: sans-serif; background: white; margin: 0; padding: 0; color: black; }
-                
-                /* Estilo do Botão Gigante de Imprimir */
-                .print-btn-wrapper {
-                  padding: 20px;
-                  text-align: center;
-                  background-color: #f1f5f9;
-                  border-bottom: 2px dashed #cbd5e1;
-                  margin-bottom: 20px;
-                }
-                .print-btn {
-                  background-color: #2563eb;
-                  color: white;
-                  border: none;
-                  padding: 16px 24px;
-                  font-size: 20px;
-                  font-weight: bold;
-                  border-radius: 12px;
-                  width: 100%;
-                  max-width: 300px;
-                  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-                  cursor: pointer;
-                }
-                .print-btn:active { background-color: #1d4ed8; }
-
-                /* Estilo da Folha de Impressão */
-                .ticket-area { display: flex; flex-direction: column; align-items: center; }
-                .ticket { width: 58mm; padding: 5mm; text-align: center; box-sizing: border-box; margin: 0 auto; }
-                
-                /* Remove a quebra de página do último ticket pra não gastar papel à toa */
-                .ticket:last-child { page-break-after: auto !important; }
-                
-                /* O Segredo: Tudo que estiver no Wrapper do Botão SOME na hora da impressão real */
-                @media print {
-                  .print-btn-wrapper { display: none !important; }
-                  body { background: white; }
-                }
-              </style>
-            </head>
-            <body>
-              <div class="print-btn-wrapper">
-                <button class="print-btn" onclick="window.print()">🖨️ IMPRIMIR AGORA</button>
-                <p style="margin-top: 10px; font-size: 14px; color: #64748b;">Toque no botão azul acima para enviar à impressora térmica.</p>
-              </div>
-              
-              <div class="ticket-area">
-                ${ticketsHtml}
-              </div>
-
-              <script>
-                // Tenta chamar sozinho por comodidade. 
-                // Se o celular bloquear, o botão acima garante o funcionamento.
-                window.onload = function() {
-                  setTimeout(function() {
-                    window.print();
-                  }, 500);
-                };
-              </script>
-            </body>
-            </html>
-          `);
-          printWindow.document.close();
-        }
-        // Esvazia a memória do React após jogar pra aba nova
-        setPrintingVoters([]);
-      }, 300);
-
+      // Troca a UI inteira pela visão de impressão
+      setIsPrintingMode(true);
     } else {
-      // É COMPUTADOR: Não mexemos no que já funciona perfeitamente!
-      setPrintingVoters(votersToPrint);
+      // PC: A técnica invisível funciona maravilhosamente bem. Mantemos.
       setTimeout(() => {
         window.print();
       }, 400);
@@ -442,10 +325,92 @@ export default function Admin() {
   const sortedVoters = [...voters].sort((a, b) => b.createdAt - a.createdAt);
   const filteredVoters = sortedVoters.filter(v => v.code.includes(searchVoter));
 
+  // =======================================================================
+  // TELA EXCLUSIVA DE IMPRESSÃO (RENDERIZADA NO LUGAR DO ADMIN NO CELULAR)
+  // =======================================================================
+  if (isPrintingMode) {
+    return (
+      <div className="bg-white min-h-screen font-sans text-black">
+        <style>{`
+          /* Regras rígidas para forçar a formatação correta do papel */
+          @media print {
+            @page { margin: 0; size: 58mm auto; }
+            body { background: white !important; margin: 0; padding: 0; }
+            .no-print { display: none !important; }
+            .ticket { width: 58mm !important; padding: 5mm !important; text-align: center; box-sizing: border-box; page-break-after: always; margin: 0 auto; }
+            .ticket:last-child { page-break-after: auto !important; }
+          }
+        `}</style>
+        
+        {/* Barra Fixa no Topo (Não sai no papel) */}
+        <div className="no-print bg-slate-100 p-4 md:p-6 border-b border-slate-300 flex flex-col items-center sticky top-0 z-50 shadow-md">
+          <h2 className="text-xl font-bold mb-4 text-slate-800">Visualização de Impressão</h2>
+          
+          {/* BOTÃO NATIVO: Como está na URL real, o celular nunca vai bloquear */}
+          <Button 
+            onClick={() => window.print()} 
+            className="w-full max-w-sm bg-blue-600 hover:bg-blue-700 text-white text-xl py-8 mb-4 font-bold shadow-xl border border-blue-800"
+          >
+            🖨️ IMPRIMIR AGORA
+          </Button>
+          
+          <Button 
+            variant="outline" 
+            onClick={() => { setIsPrintingMode(false); setPrintingVoters([]); }} 
+            className="w-full max-w-sm text-slate-600 font-bold border-slate-300 py-6"
+          >
+            Cancelar e Voltar ao Painel
+          </Button>
+        </div>
+        
+        {/* A Área dos Tickets na Tela Cheia */}
+        <div className="flex flex-col items-center py-4 bg-white">
+          {printingVoters.map((v, index) => (
+            <div 
+              key={v.code} 
+              className="ticket" 
+              style={{ 
+                width: '58mm', 
+                padding: '5mm', 
+                textAlign: 'center', 
+                boxSizing: 'border-box',
+                margin: '0 auto',
+                pageBreakAfter: index === printingVoters.length - 1 ? 'auto' : 'always',
+                borderBottom: index === printingVoters.length - 1 ? 'none' : '1px dashed #ccc' // Guia visual na tela
+              }}
+            >
+              <h2 style={{fontSize:'14px', margin:0, fontWeight: 'bold', color: 'black'}}>IPB NOVA BRASÍLIA</h2>
+              <p style={{fontSize:'10px', margin:'2px 0 10px', fontWeight: 'bold', color: 'black'}}>ASSEMBLEIA EXTRAORDINÁRIA</p>
+              
+              <div style={{borderTop:'1px dashed #000', borderBottom:'1px dashed #000', padding:'10px 0', margin:'10px 0'}}>
+                <span style={{fontSize:'10px', fontWeight: 'bold', color: 'black'}}>CÓDIGO DE ACESSO</span>
+                <div style={{fontSize:'36px', fontWeight:'bold', fontFamily:'monospace', color: 'black'}}>{v.code}</div>
+              </div>
+              
+              <div style={{display:'flex', justifyContent:'center', margin:'10px 0'}}>
+                <QRCodeSVG value={`https://vota.ipbnb.com.br/urna?codigo=${v.code}`} size={140} level="M" />
+              </div>
+              
+              <p style={{fontSize:'10px', lineHeight:'1.2', marginTop: '10px', color: 'black'}}>
+                Aponte a câmera do celular para este<br/>QR Code e a urna abrirá sozinha.
+              </p>
+              <p style={{fontSize:'8px', opacity:0.6, marginTop: '5px', color: 'black'}}>
+                Uso único e intransferível.
+              </p>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // =======================================================================
+  // PAINEL DE ADMINISTRAÇÃO NORMAL (USADO NO PC OU NO MOBILE QUANDO NÃO ESTÁ IMPRIMINDO)
+  // =======================================================================
   return (
     <>
+      {/* Estilo para a impressão invisível funcionar no Desktop */}
       <style>{`
-        /* A div oculta oficial! Escondida em PCs e Celulares, usada só pra gerar a imagem Base64. */
         @media screen { 
           .print-container { 
             position: fixed;
@@ -456,8 +421,6 @@ export default function Admin() {
             z-index: -1;
           } 
         }
-
-        /* Regras apenas para Desktop (Já que mobile vai usar a aba nova). */
         @media print {
           @page { margin: 0; size: 58mm auto; }
           html, body { height: auto !important; overflow: visible !important; background: white !important; margin: 0 !important; padding: 0 !important; }
@@ -955,14 +918,13 @@ export default function Admin() {
         </div>
       )}
 
-      {/* MÓDULO DE IMPRESSÃO INVISÍVEL - USADO PARA GERAR AS IMAGENS BASE64 */}
-      {printingVoters.length > 0 && (
+      {/* MÓDULO DE IMPRESSÃO (NO PC CONTINUA INVISÍVEL) */}
+      {!isPrintingMode && printingVoters.length > 0 && (
         <div className="print-container font-sans text-black bg-white">
           {printingVoters.map((v, index) => (
             <div 
               key={v.code} 
               className="ticket"
-              data-code={v.code}
               style={{ 
                 pageBreakAfter: index === printingVoters.length - 1 ? 'auto' : 'always',
                 breakInside: 'avoid'
@@ -977,8 +939,7 @@ export default function Admin() {
               </div>
               
               <div style={{display:'flex', justifyContent:'center', margin:'10px 0'}}>
-                {/* O QRCodeCanvas desenha os pixels reais em vez de usar SVG */}
-                <QRCodeCanvas value={`https://vota.ipbnb.com.br/urna?codigo=${v.code}`} size={140} level="M" />
+                <QRCodeSVG value={`https://vota.ipbnb.com.br/urna?codigo=${v.code}`} size={140} level="M" />
               </div>
               
               <p style={{fontSize:'10px', lineHeight:'1.2', marginTop: '10px'}}>
