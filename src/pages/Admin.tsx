@@ -57,6 +57,7 @@ export default function Admin() {
   const [selectedParticipants, setSelectedParticipants] = useState<string[]>([]);
 
   const [voterCountToGenerate, setVoterCountToGenerate] = useState<number | string>(1);
+  const [tagToGenerate, setTagToGenerate] = useState(''); // NOVO: Estado para a tag na hora de gerar
   const [printingVoters, setPrintingVoters] = useState<Voter[]>([]);
   const [searchVoter, setSearchVoter] = useState('');
   
@@ -277,6 +278,7 @@ export default function Admin() {
     return { remainingSlots, nextRound, alreadyElected };
   };
 
+  // FUNÇÃO ATUALIZADA: Gerar com TAG já inclusa
   const handleGenerateVoters = () => {
     const count = parseInt(voterCountToGenerate.toString());
     if (isNaN(count) || count <= 0 || count > 500) {
@@ -291,11 +293,21 @@ export default function Admin() {
         code = Math.floor(100000 + Math.random() * 900000).toString();
         isDuplicate = voters.some(v => v.code === code) || newVoters.some(v => v.code === code);
       } while (isDuplicate);
-      newVoters.push({ code, createdAt: Date.now(), tag: '' });
+      
+      // Inteligência para enumerar a Tag se a pessoa gerar mais de 1 código com o mesmo nome
+      let finalTag = tagToGenerate.trim();
+      if (count > 1 && finalTag) {
+        finalTag = `${finalTag} ${i + 1}`; 
+      }
+      
+      newVoters.push({ code, createdAt: Date.now(), tag: finalTag });
     }
     dispatch({ type: 'ADD_VOTERS', payload: newVoters });
     toast.success(`${count} códigos gerados com sucesso!`);
+    
+    // Limpa os campos após gerar
     setVoterCountToGenerate(1);
+    setTagToGenerate('');
   };
 
   const handleClearVoters = () => {
@@ -331,9 +343,6 @@ export default function Admin() {
     setNewTagValue(voter.tag || '');
   };
 
-  // =======================================================================
-  // A IMPRESSÃO VIA NOVA ABA (MOBILE) COM BOTÃO E AUTO-PRINT
-  // =======================================================================
   const handlePrint = (votersToPrint: Voter[]) => {
     if (votersToPrint.length === 0) return;
 
@@ -586,31 +595,43 @@ export default function Admin() {
             </CardHeader>
             <CardContent className="pt-6 space-y-6">
               
-              <div className="flex flex-col sm:flex-row items-start sm:items-end gap-3 bg-muted/50 p-4 rounded-xl border border-border/50">
-                <div className="flex items-end gap-2 w-full sm:w-auto">
-                  <div className="flex-1 sm:w-48">
-                    <Label>Gerar nova quantidade:</Label>
+              {/* ÁREA DE GERAÇÃO COM O NOVO CAMPO DE NOME/TAG */}
+              <div className="flex flex-col md:flex-row items-start md:items-end gap-3 bg-muted/50 p-4 rounded-xl border border-border/50">
+                <div className="flex flex-wrap sm:flex-nowrap items-end gap-2 w-full">
+                  <div className="w-20 shrink-0">
+                    <Label className="text-xs">Qtd:</Label>
                     <Input 
                       type="number" 
                       min={1} max={500}
                       value={voterCountToGenerate} 
                       onChange={e => setVoterCountToGenerate(e.target.value)} 
-                      className="mt-1"
+                      className="mt-1 h-9"
                     />
                   </div>
-                  <Button onClick={handleGenerateVoters} className="bg-blue-600 hover:bg-blue-700 text-white">
-                    <Plus className="w-4 h-4 md:mr-2" /> <span className="hidden md:inline">Gerar</span>
+                  <div className="flex-1 min-w-[150px]">
+                    <Label className="text-xs">Nome / Tag (Opcional):</Label>
+                    <Input 
+                      type="text" 
+                      placeholder="Ex: Irmão João..."
+                      value={tagToGenerate}
+                      onChange={e => setTagToGenerate(e.target.value)}
+                      className="mt-1 h-9"
+                    />
+                  </div>
+                  <Button onClick={handleGenerateVoters} className="h-9 bg-blue-600 hover:bg-blue-700 text-white w-full sm:w-auto mt-2 sm:mt-0">
+                    <Plus className="w-4 h-4 mr-1" /> Gerar
                   </Button>
                 </div>
                 
-                <div className="flex-1 hidden sm:block"></div>
+                {/* Divisor invisível no mobile para separar as ações */}
+                <div className="w-full h-px bg-border/50 md:hidden my-1"></div>
                 
-                <div className="grid grid-cols-2 sm:flex gap-2 w-full sm:w-auto mt-2 sm:mt-0">
-                  <Button variant="outline" onClick={() => handlePrint(voters)} disabled={voters.length === 0} className="w-full border-blue-600 text-blue-600 hover:bg-blue-50 px-2 sm:px-4 text-xs sm:text-sm">
-                    <Printer className="w-4 h-4 mr-1 md:mr-2" /> Imprimir<span className="hidden sm:inline">&nbsp;Todos</span>
+                <div className="flex gap-2 w-full md:w-auto shrink-0">
+                  <Button variant="outline" onClick={() => handlePrint(voters)} disabled={voters.length === 0} className="flex-1 md:flex-none h-9 border-blue-600 text-blue-600 hover:bg-blue-50 px-3 text-xs">
+                    <Printer className="w-3.5 h-3.5 mr-1" /> Imprimir Todos
                   </Button>
-                  <Button variant="destructive" onClick={handleClearVoters} disabled={voters.length === 0 || isVotingOpen} className="w-full px-2 sm:px-4 text-xs sm:text-sm">
-                    <Trash2 className="w-4 h-4 mr-1 md:mr-2" /> Excluir<span className="hidden sm:inline">&nbsp;Todos</span>
+                  <Button variant="destructive" onClick={handleClearVoters} disabled={voters.length === 0 || isVotingOpen} className="flex-1 md:flex-none h-9 px-3 text-xs">
+                    <Trash2 className="w-3.5 h-3.5 mr-1" /> Excluir Todos
                   </Button>
                 </div>
               </div>
@@ -756,17 +777,21 @@ export default function Admin() {
                       <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center overflow-hidden shrink-0">
                         {c.photo ? <img src={c.photo} alt={c.name} className="w-full h-full object-cover" /> : <Users className="w-5 h-5 text-muted-foreground" />}
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-sm truncate">{c.name}</p>
-                        <Badge variant="secondary" className="text-xs">{ROLE_LABELS[c.currentRole]}</Badge>
+                      
+                      {/* FIX DA IMAGEM: Adicionado w-full, flex flex-col items-start e truncate max-w-full */}
+                      <div className="flex-1 min-w-0 flex flex-col items-start">
+                        <p className="font-semibold text-sm w-full truncate" title={c.name}>{c.name}</p>
+                        <Badge variant="secondary" className="text-[10px] mt-1 max-w-full truncate inline-block" title={ROLE_LABELS[c.currentRole]}>
+                          {ROLE_LABELS[c.currentRole]}
+                        </Badge>
                       </div>
                       
                       {/* BOTÕES DE AÇÃO DOS CANDIDATOS */}
-                      <div className="flex items-center gap-1 shrink-0">
+                      <div className="flex items-center gap-0.5 sm:gap-1 shrink-0">
                         <Button 
                           variant="ghost" 
                           size="icon" 
-                          className="text-muted-foreground hover:text-blue-600 hover:bg-blue-50" 
+                          className="text-muted-foreground hover:text-blue-600 hover:bg-blue-50 h-8 w-8" 
                           onClick={() => {
                             setForm({ name: c.name, photo: c.photo || '', birthDate: c.birthDate, currentRole: c.currentRole });
                             setEditingCandidate(c);
@@ -781,7 +806,7 @@ export default function Admin() {
                         <Button 
                           variant="ghost" 
                           size="icon" 
-                          className="text-muted-foreground hover:text-destructive hover:bg-red-50" 
+                          className="text-muted-foreground hover:text-destructive hover:bg-red-50 h-8 w-8" 
                           onClick={() => dispatch({ type: 'REMOVE_CANDIDATE', payload: c.id })} 
                           disabled={isVotingOpen} 
                           title="Excluir Candidato"
@@ -1090,7 +1115,7 @@ export default function Admin() {
         </div>
       )}
 
-      {/* MÓDULO DE IMPRESSÃO (NO PC FICA INVISÍVEL - TÉCNICA DA NOVA ABA) */}
+      {/* MÓDULO DE IMPRESSÃO (NO PC FICA INVISÍVEL - TÉCNICA DA NOVA ABA E BOTÃO) */}
       {printingVoters.length > 0 && (
         <div className="print-container font-sans text-black bg-white">
           {printingVoters.map((v, index) => (
@@ -1102,7 +1127,6 @@ export default function Admin() {
                 breakInside: 'avoid'
               }}
             >
-              {/* O NOVO CABEÇALHO DINÂMICO E TÍTULO DA ELEIÇÃO */}
               <h2 style={{fontSize:'14px', margin:0, fontWeight: 'bold'}}>IPB NOVA BRASÍLIA</h2>
               
               <p style={{fontSize:'10px', margin:'2px 0 2px', fontWeight: 'bold', textTransform: 'uppercase'}}>
@@ -1118,7 +1142,6 @@ export default function Admin() {
               <div style={{borderTop:'1px dashed #000', borderBottom:'1px dashed #000', padding:'10px 0', margin:'10px 0'}}>
                 <span style={{fontSize:'10px', fontWeight: 'bold'}}>CÓDIGO DE ACESSO</span>
                 <div style={{fontSize:'36px', fontWeight:'bold', fontFamily:'monospace'}}>{v.code}</div>
-                {/* Se tiver tag cadastrada, imprime no papel pequenininho */}
                 {v.tag && <div style={{fontSize:'10px', fontWeight:'normal', marginTop:'4px'}}>{v.tag}</div>}
               </div>
               
@@ -1130,13 +1153,12 @@ export default function Admin() {
                 Aponte a câmera do celular para este<br/>QR Code e a urna abrirá sozinha.
               </p>
               
-              {/* O NOVO RODAPÉ COM LINHA DE CORTE E MARGEM */}
               <p style={{fontSize:'9px', fontWeight:'bold', marginTop: '8px', padding: '0 5px'}}>
                 Senha pessoal e intransferível.<br/>Guarde este papel para uso em<br/>todos os escrutínios.
               </p>
               
               <div style={{marginTop: '15px', borderBottom: '1px dashed #000', width: '100%'}}></div>
-              <div style={{height: '15px'}}></div> {/* Margem de respiro para a guilhotina não mastigar */}
+              <div style={{height: '15px'}}></div>
               
             </div>
           ))}
