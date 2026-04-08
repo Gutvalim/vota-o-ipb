@@ -9,7 +9,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
-import { QRCodeSVG } from 'qrcode.react';
+// Mantemos o Canvas para blindar a memória do celular na técnica de impressão invisível
+import { QRCodeCanvas } from 'qrcode.react';
 import {
   ArrowLeft, Plus, Trash2, Play, Square, AlertTriangle, Users, Award, RotateCcw, UserPlus, LogOut, CheckCircle2, XCircle, ShieldCheck, Eye, QrCode, Printer, Smartphone, Tablet, Search, UserMinus, Settings, Tag, Edit
 } from 'lucide-react';
@@ -91,6 +92,7 @@ export default function Admin() {
   const voters = state.voters || [];
   const votedCodesList = currentScrutiny?.votedCodes || [];
 
+  // FILTRO INTELIGENTE DE ALERTAS (Não mostra diácono em vencimento)
   const importantAlerts = state.alerts.filter(alert => !alert.toLowerCase().includes('vencimento'));
 
   const handleSaveElection = (field: string, value: string | number) => {
@@ -331,78 +333,19 @@ export default function Admin() {
     setNewTagValue(voter.tag || '');
   };
 
+  // =======================================================================
+  // A IMPRESSÃO RAIZ (Na mesma página, via CSS invisível)
+  // =======================================================================
   const handlePrint = (votersToPrint: Voter[]) => {
     if (votersToPrint.length === 0) return;
 
-    const isMobile = window.innerWidth <= 768 || /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+    // Jogamos os tickets na memória. O CSS da div invisível cuidará do resto.
+    setPrintingVoters(votersToPrint);
 
-    if (isMobile) {
-      const printWindow = window.open('', '_blank');
-      
-      if (!printWindow) {
-        toast.error("Pop-up bloqueado! Permita pop-ups nas configurações do seu navegador.", { duration: 6000 });
-        return;
-      }
-
-      setPrintingVoters(votersToPrint);
-
-      setTimeout(() => {
-        const container = document.querySelector('.print-container');
-        if (container) {
-          printWindow.document.write(`
-            <!DOCTYPE html>
-            <html lang="pt-BR">
-            <head>
-              <meta charset="UTF-8">
-              <meta name="viewport" content="width=device-width, initial-scale=1.0">
-              <title>Imprimir Tickets</title>
-              <style>
-                @page { margin: 0; size: 58mm auto; }
-                body { font-family: sans-serif; background: white; margin: 0; padding: 10px; color: black; }
-                .instruction-box {
-                  background-color: #f8fafc;
-                  border: 2px dashed #94a3b8;
-                  border-radius: 12px;
-                  padding: 20px;
-                  text-align: center;
-                  margin-bottom: 20px;
-                }
-                .instruction-box h3 { margin-top: 0; color: #0f172a; }
-                .instruction-box p { color: #334155; font-size: 14px; margin-bottom: 0; }
-                .ticket-area { display: flex; flex-direction: column; align-items: center; }
-                .ticket { width: 58mm; padding: 5mm; text-align: center; box-sizing: border-box; margin: 0 auto; page-break-after: always; }
-                .ticket:last-child { page-break-after: auto !important; }
-                h2 { font-size: 14px; margin: 0; font-weight: bold; }
-                p { margin: 0; }
-                svg { max-width: 100%; height: auto; }
-                @media print {
-                  .instruction-box { display: none !important; }
-                  body { padding: 0; }
-                }
-              </style>
-            </head>
-            <body>
-              <div class="instruction-box">
-                <h3>🖨️ Página Pronta para Impressão</h3>
-                <p>Abra o menu do seu navegador e escolha <strong>"Imprimir"</strong> ou <strong>"Compartilhar > Imprimir"</strong>.</p>
-              </div>
-              <div class="ticket-area">
-                ${container.innerHTML}
-              </div>
-            </body>
-            </html>
-          `);
-          printWindow.document.close();
-        }
-        setPrintingVoters([]);
-      }, 500);
-
-    } else {
-      setPrintingVoters(votersToPrint);
-      setTimeout(() => {
-        window.print();
-      }, 800);
-    }
+    // Damos 800ms pro React desenhar o Canvas.
+    setTimeout(() => {
+      window.print();
+    }, 800);
   };
 
   const sortedVoters = [...voters].sort((a, b) => b.createdAt - a.createdAt);
@@ -414,6 +357,7 @@ export default function Admin() {
   return (
     <>
       <style>{`
+        /* A Div Invisível que funciona no PC e mobile na técnica raiz */
         @media screen { 
           .print-container { 
             position: absolute !important;
@@ -427,6 +371,8 @@ export default function Admin() {
             border: 0 !important;
           } 
         }
+
+        /* Regras de formatação do papel térmico */
         @media print {
           @page { margin: 0; size: 58mm auto; }
           html, body { height: auto !important; overflow: visible !important; background: white !important; margin: 0 !important; padding: 0 !important; }
@@ -736,7 +682,7 @@ export default function Admin() {
                         <Badge variant="secondary" className="text-xs">{ROLE_LABELS[c.currentRole]}</Badge>
                       </div>
                       
-                      {/* BOTÕES DE AÇÃO DOS CANDIDATOS (Agora com opção de EDITAR) */}
+                      {/* BOTÕES DE AÇÃO DOS CANDIDATOS */}
                       <div className="flex items-center gap-1 shrink-0">
                         <Button 
                           variant="ghost" 
@@ -746,7 +692,7 @@ export default function Admin() {
                             setForm({ name: c.name, photo: c.photo || '', birthDate: c.birthDate, currentRole: c.currentRole });
                             setEditingCandidate(c);
                             setShowCandidateForm(true);
-                            window.scrollTo({ top: 0, behavior: 'smooth' }); // Rola pro form
+                            window.scrollTo({ top: 0, behavior: 'smooth' });
                           }} 
                           disabled={isVotingOpen} 
                           title="Editar Candidato"
@@ -1065,7 +1011,7 @@ export default function Admin() {
         </div>
       )}
 
-      {/* MÓDULO DE IMPRESSÃO (NO PC FICA INVISÍVEL - TÉCNICA DA NOVA ABA) */}
+      {/* MÓDULO DE IMPRESSÃO (NO PC E NO MOBILE FICA INVISÍVEL - TÉCNICA RAIZ) */}
       {printingVoters.length > 0 && (
         <div className="print-container font-sans text-black bg-white">
           {printingVoters.map((v, index) => (
@@ -1077,6 +1023,7 @@ export default function Admin() {
                 breakInside: 'avoid'
               }}
             >
+              {/* O NOVO CABEÇALHO DINÂMICO E TÍTULO DA ELEIÇÃO */}
               <h2 style={{fontSize:'14px', margin:0, fontWeight: 'bold'}}>IPB NOVA BRASÍLIA</h2>
               
               <p style={{fontSize:'10px', margin:'2px 0 2px', fontWeight: 'bold', textTransform: 'uppercase'}}>
@@ -1092,23 +1039,26 @@ export default function Admin() {
               <div style={{borderTop:'1px dashed #000', borderBottom:'1px dashed #000', padding:'10px 0', margin:'10px 0'}}>
                 <span style={{fontSize:'10px', fontWeight: 'bold'}}>CÓDIGO DE ACESSO</span>
                 <div style={{fontSize:'36px', fontWeight:'bold', fontFamily:'monospace'}}>{v.code}</div>
+                {/* Se tiver tag cadastrada, imprime no papel pequenininho */}
                 {v.tag && <div style={{fontSize:'10px', fontWeight:'normal', marginTop:'4px'}}>{v.tag}</div>}
               </div>
               
               <div style={{display:'flex', justifyContent:'center', margin:'10px 0'}}>
-                <QRCodeSVG value={`https://vota.ipbnb.com.br/urna?codigo=${v.code}`} size={140} level="M" />
+                {/* CANVAS PARA A IMPRESSÃO RAIZ DIRETO NA PÁGINA */}
+                <QRCodeCanvas value={`https://vota.ipbnb.com.br/urna?codigo=${v.code}`} size={140} level="M" />
               </div>
               
               <p style={{fontSize:'9px', lineHeight:'1.2', marginTop: '10px'}}>
                 Aponte a câmera do celular para este<br/>QR Code e a urna abrirá sozinha.
               </p>
               
+              {/* O NOVO RODAPÉ COM LINHA DE CORTE E MARGEM */}
               <p style={{fontSize:'9px', fontWeight:'bold', marginTop: '8px', padding: '0 5px'}}>
                 Senha pessoal e intransferível.<br/>Guarde este papel para uso em<br/>todos os escrutínios.
               </p>
               
               <div style={{marginTop: '15px', borderBottom: '1px dashed #000', width: '100%'}}></div>
-              <div style={{height: '15px'}}></div>
+              <div style={{height: '15px'}}></div> {/* Margem de respiro para a guilhotina não mastigar */}
               
             </div>
           ))}
