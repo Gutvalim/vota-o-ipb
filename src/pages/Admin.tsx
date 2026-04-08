@@ -61,21 +61,18 @@ export default function Admin() {
   const [searchVoter, setSearchVoter] = useState('');
   
   const [showPendingModal, setShowPendingModal] = useState(false);
-  
-  // NOVO: Modo de Impressão de Tela Cheia (A Solução Definitiva)
-  const [isPrintingMode, setIsPrintingMode] = useState(false);
 
   const [authMode, setAuthMode] = useState<'pin' | 'code'>('pin');
   const [customPin, setCustomPin] = useState('4321');
 
   useEffect(() => {
+    // Limpa a memória no PC após a impressão
     const handleAfterPrint = () => {
-      // Limpa os eleitores da memória ao terminar (apenas no PC, o mobile usa o botão "Voltar")
-      if (!isPrintingMode) setPrintingVoters([]);
+      setPrintingVoters([]);
     };
     window.addEventListener('afterprint', handleAfterPrint);
     return () => window.removeEventListener('afterprint', handleAfterPrint);
-  }, [isPrintingMode]);
+  }, []);
 
   if (!currentUser) {
     navigate('/login');
@@ -302,20 +299,74 @@ export default function Admin() {
   };
 
   // =======================================================================
-  // A ABORDAGEM "IN-PLACE VIEW" (Substituição de Tela na Mesma Aba)
+  // A ABORDAGEM DEFINITIVA DO IFRAME OCULTO (Padrão da Indústria Web)
   // =======================================================================
   const handlePrint = (votersToPrint: Voter[]) => {
     if (votersToPrint.length === 0) return;
 
-    // Detecta se é celular
     const isMobile = window.innerWidth <= 768 || /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
     setPrintingVoters(votersToPrint);
 
     if (isMobile) {
-      // Troca a UI inteira pela visão de impressão
-      setIsPrintingMode(true);
+      // Cria ou recupera um Iframe fantasma no documento
+      let iframe = document.getElementById('print-iframe') as HTMLIFrameElement;
+      
+      if (!iframe) {
+        iframe = document.createElement('iframe');
+        iframe.id = 'print-iframe';
+        // Essencial para o iOS não ignorar: O iframe deve ser renderizado, mas ficar fora da visão
+        iframe.style.position = 'absolute';
+        iframe.style.top = '-9999px';
+        iframe.style.width = '1px';
+        iframe.style.height = '1px';
+        iframe.style.border = 'none';
+        document.body.appendChild(iframe);
+      }
+
+      // Aguarda 300ms para o React desenhar o SVG na div .print-container
+      setTimeout(() => {
+        const container = document.querySelector('.print-container');
+        
+        if (container && iframe.contentWindow) {
+          const doc = iframe.contentWindow.document;
+          doc.open();
+          // Injetamos um HTML limpo no Iframe, sem o Tailwind do sistema.
+          doc.write(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+              <meta charset="utf-8">
+              <title>Imprimir Tickets</title>
+              <style>
+                @page { margin: 0; size: 58mm auto; }
+                body { margin: 0; padding: 0; background: white; color: black; font-family: sans-serif; }
+                .ticket { width: 58mm; padding: 5mm; text-align: center; box-sizing: border-box; page-break-after: always; margin: 0 auto; }
+                .ticket:last-child { page-break-after: auto; }
+                h2 { font-size: 14px; margin: 0; font-weight: bold; }
+                p { margin: 0; }
+                svg { max-width: 100%; height: auto; }
+              </style>
+            </head>
+            <body>
+              ${container.innerHTML}
+            </body>
+            </html>
+          `);
+          doc.close();
+
+          // Um pequeno tempo extra (150ms) para o Iframe digerir o CSS, e então dispara a impressão DELE.
+          setTimeout(() => {
+            iframe.contentWindow?.focus();
+            iframe.contentWindow?.print();
+            
+            // Limpa a memória de forma silenciosa
+            setTimeout(() => setPrintingVoters([]), 1000);
+          }, 150);
+        }
+      }, 300);
+
     } else {
-      // PC: A técnica invisível funciona maravilhosamente bem. Mantemos.
+      // PC: A técnica nativa invisível que já funciona perfeitamente
       setTimeout(() => {
         window.print();
       }, 400);
@@ -325,92 +376,10 @@ export default function Admin() {
   const sortedVoters = [...voters].sort((a, b) => b.createdAt - a.createdAt);
   const filteredVoters = sortedVoters.filter(v => v.code.includes(searchVoter));
 
-  // =======================================================================
-  // TELA EXCLUSIVA DE IMPRESSÃO (RENDERIZADA NO LUGAR DO ADMIN NO CELULAR)
-  // =======================================================================
-  if (isPrintingMode) {
-    return (
-      <div className="bg-white min-h-screen font-sans text-black">
-        <style>{`
-          /* Regras rígidas para forçar a formatação correta do papel */
-          @media print {
-            @page { margin: 0; size: 58mm auto; }
-            body { background: white !important; margin: 0; padding: 0; }
-            .no-print { display: none !important; }
-            .ticket { width: 58mm !important; padding: 5mm !important; text-align: center; box-sizing: border-box; page-break-after: always; margin: 0 auto; }
-            .ticket:last-child { page-break-after: auto !important; }
-          }
-        `}</style>
-        
-        {/* Barra Fixa no Topo (Não sai no papel) */}
-        <div className="no-print bg-slate-100 p-4 md:p-6 border-b border-slate-300 flex flex-col items-center sticky top-0 z-50 shadow-md">
-          <h2 className="text-xl font-bold mb-4 text-slate-800">Visualização de Impressão</h2>
-          
-          {/* BOTÃO NATIVO: Como está na URL real, o celular nunca vai bloquear */}
-          <Button 
-            onClick={() => window.print()} 
-            className="w-full max-w-sm bg-blue-600 hover:bg-blue-700 text-white text-xl py-8 mb-4 font-bold shadow-xl border border-blue-800"
-          >
-            🖨️ IMPRIMIR AGORA
-          </Button>
-          
-          <Button 
-            variant="outline" 
-            onClick={() => { setIsPrintingMode(false); setPrintingVoters([]); }} 
-            className="w-full max-w-sm text-slate-600 font-bold border-slate-300 py-6"
-          >
-            Cancelar e Voltar ao Painel
-          </Button>
-        </div>
-        
-        {/* A Área dos Tickets na Tela Cheia */}
-        <div className="flex flex-col items-center py-4 bg-white">
-          {printingVoters.map((v, index) => (
-            <div 
-              key={v.code} 
-              className="ticket" 
-              style={{ 
-                width: '58mm', 
-                padding: '5mm', 
-                textAlign: 'center', 
-                boxSizing: 'border-box',
-                margin: '0 auto',
-                pageBreakAfter: index === printingVoters.length - 1 ? 'auto' : 'always',
-                borderBottom: index === printingVoters.length - 1 ? 'none' : '1px dashed #ccc' // Guia visual na tela
-              }}
-            >
-              <h2 style={{fontSize:'14px', margin:0, fontWeight: 'bold', color: 'black'}}>IPB NOVA BRASÍLIA</h2>
-              <p style={{fontSize:'10px', margin:'2px 0 10px', fontWeight: 'bold', color: 'black'}}>ASSEMBLEIA EXTRAORDINÁRIA</p>
-              
-              <div style={{borderTop:'1px dashed #000', borderBottom:'1px dashed #000', padding:'10px 0', margin:'10px 0'}}>
-                <span style={{fontSize:'10px', fontWeight: 'bold', color: 'black'}}>CÓDIGO DE ACESSO</span>
-                <div style={{fontSize:'36px', fontWeight:'bold', fontFamily:'monospace', color: 'black'}}>{v.code}</div>
-              </div>
-              
-              <div style={{display:'flex', justifyContent:'center', margin:'10px 0'}}>
-                <QRCodeSVG value={`https://vota.ipbnb.com.br/urna?codigo=${v.code}`} size={140} level="M" />
-              </div>
-              
-              <p style={{fontSize:'10px', lineHeight:'1.2', marginTop: '10px', color: 'black'}}>
-                Aponte a câmera do celular para este<br/>QR Code e a urna abrirá sozinha.
-              </p>
-              <p style={{fontSize:'8px', opacity:0.6, marginTop: '5px', color: 'black'}}>
-                Uso único e intransferível.
-              </p>
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  // =======================================================================
-  // PAINEL DE ADMINISTRAÇÃO NORMAL (USADO NO PC OU NO MOBILE QUANDO NÃO ESTÁ IMPRIMINDO)
-  // =======================================================================
   return (
     <>
-      {/* Estilo para a impressão invisível funcionar no Desktop */}
       <style>{`
+        /* A Div Invisível oficial que serve de "molde" para o PC e para o Iframe no Mobile */
         @media screen { 
           .print-container { 
             position: fixed;
@@ -421,6 +390,8 @@ export default function Admin() {
             z-index: -1;
           } 
         }
+
+        /* Regras apenas para a versão Desktop */
         @media print {
           @page { margin: 0; size: 58mm auto; }
           html, body { height: auto !important; overflow: visible !important; background: white !important; margin: 0 !important; padding: 0 !important; }
@@ -918,8 +889,8 @@ export default function Admin() {
         </div>
       )}
 
-      {/* MÓDULO DE IMPRESSÃO (NO PC CONTINUA INVISÍVEL) */}
-      {!isPrintingMode && printingVoters.length > 0 && (
+      {/* A DIV INVISÍVEL OFICIAL PARA PC E PARA O IFRAME */}
+      {printingVoters.length > 0 && (
         <div className="print-container font-sans text-black bg-white">
           {printingVoters.map((v, index) => (
             <div 
