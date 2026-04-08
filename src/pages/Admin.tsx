@@ -9,10 +9,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
-// Importação segura para a memória do celular
+// Mantemos o Canvas para blindar a memória do celular
 import { QRCodeSVG, QRCodeCanvas } from 'qrcode.react';
 import {
-  ArrowLeft, Plus, Trash2, Play, Square, AlertTriangle, Users, Award, RotateCcw, UserPlus, LogOut, CheckCircle2, XCircle, ShieldCheck, Eye, QrCode, Printer, Smartphone, Tablet, Search, UserMinus, Settings
+  ArrowLeft, Plus, Trash2, Play, Square, AlertTriangle, Users, Award, RotateCcw, UserPlus, LogOut, CheckCircle2, XCircle, ShieldCheck, Eye, QrCode, Printer, Smartphone, Tablet, Search, UserMinus, Settings, Tag
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -48,7 +48,6 @@ function SyncInput({ value, onChange, ...props }: any) {
 
 export default function Admin() {
   const { state, dispatch } = useElection();
-  // Incluindo o deleteUser do contexto (ou usando rejectUser como fallback)
   const { currentUser, users, logout, approveUser, rejectUser, deleteUser } = useAuth() as any;
   const navigate = useNavigate();
 
@@ -63,24 +62,22 @@ export default function Admin() {
   const [searchVoter, setSearchVoter] = useState('');
   
   const [showPendingModal, setShowPendingModal] = useState(false);
-  
-  // Controle do novo Modal de Gerenciar Usuários
   const [showManageUsersModal, setShowManageUsersModal] = useState(false);
 
-  // Modo de Impressão para Celular
-  const [isPrintingMode, setIsPrintingMode] = useState(false);
+  // Estados para o novo sistema de Tags (Nomes)
+  const [taggingVoterCode, setTaggingVoterCode] = useState<string | null>(null);
+  const [newTagValue, setNewTagValue] = useState('');
 
   const [authMode, setAuthMode] = useState<'pin' | 'code'>('pin');
   const [customPin, setCustomPin] = useState('4321');
 
   useEffect(() => {
     const handleAfterPrint = () => {
-      // Limpa os tickets da memória apenas se estiver no PC
-      if (!isPrintingMode) setPrintingVoters([]);
+      setPrintingVoters([]);
     };
     window.addEventListener('afterprint', handleAfterPrint);
     return () => window.removeEventListener('afterprint', handleAfterPrint);
-  }, [isPrintingMode]);
+  }, []);
 
   if (!currentUser) {
     navigate('/login');
@@ -102,11 +99,8 @@ export default function Admin() {
 
   const handleRemoveUser = (username: string) => {
     if (confirm(`Tem certeza que deseja REVOGAR O ACESSO do usuário '${username}'?`)) {
-      if (deleteUser) {
-        deleteUser(username);
-      } else {
-        rejectUser(username);
-      }
+      if (deleteUser) deleteUser(username);
+      else rejectUser(username);
       toast.info(`Acesso de ${username} removido.`);
     }
   };
@@ -283,6 +277,7 @@ export default function Admin() {
     return { remainingSlots, nextRound, alreadyElected };
   };
 
+  // Funções de Eleitores (Voters)
   const handleGenerateVoters = () => {
     const count = parseInt(voterCountToGenerate.toString());
     if (isNaN(count) || count <= 0 || count > 500) {
@@ -297,7 +292,8 @@ export default function Admin() {
         code = Math.floor(100000 + Math.random() * 900000).toString();
         isDuplicate = voters.some(v => v.code === code) || newVoters.some(v => v.code === code);
       } while (isDuplicate);
-      newVoters.push({ code, createdAt: Date.now() });
+      // Incluímos a propriedade tag opcional vazia na criação
+      newVoters.push({ code, createdAt: Date.now(), tag: '' });
     }
     dispatch({ type: 'ADD_VOTERS', payload: newVoters });
     toast.success(`${count} códigos gerados com sucesso!`);
@@ -319,129 +315,67 @@ export default function Admin() {
     }
   };
 
+  // Nova função para salvar a TAG do eleitor
+  const handleSaveTag = () => {
+    if (!taggingVoterCode) return;
+    
+    const updatedVoters = voters.map(v => 
+      v.code === taggingVoterCode ? { ...v, tag: newTagValue.trim() } : v
+    );
+    
+    dispatch({ type: 'SET_ELECTION', payload: { voters: updatedVoters } });
+    toast.success('Nome/Tag salvo com sucesso!');
+    setTaggingVoterCode(null);
+    setNewTagValue('');
+  };
+
+  const openTagModal = (voter: Voter) => {
+    setTaggingVoterCode(voter.code);
+    setNewTagValue(voter.tag || '');
+  };
+
   // =======================================================================
-  // A IMPRESSÃO SÍNCRONA LIMPA (Com tela de fallback pro mobile)
+  // A IMPRESSÃO RAIZ (Teste de Mobile sem abrir telas extras)
   // =======================================================================
   const handlePrint = (votersToPrint: Voter[]) => {
     if (votersToPrint.length === 0) return;
 
-    const isMobile = window.innerWidth <= 768 || /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+    // Jogamos os tickets na memória. O CSS da div invisível cuidará do resto.
     setPrintingVoters(votersToPrint);
 
-    if (isMobile) {
-      // No celular, trocamos a tela. A própria tela nova fará a impressão com segurança.
-      setIsPrintingMode(true);
-      // Disparo automático suave para facilitar
-      setTimeout(() => {
-        window.print();
-      }, 800);
-    } else {
-      // PC: A técnica invisível funciona 100%
-      setTimeout(() => {
-        window.print();
-      }, 800);
-    }
+    // Damos 800ms pro React desenhar o Canvas.
+    // Como voltamos pra técnica original, o celular tentará imprimir na mesma página!
+    setTimeout(() => {
+      window.print();
+    }, 800);
   };
 
+  // Filtro de Busca (agora pesquisa pelo CÓDIGO ou pelo NOME/TAG)
   const sortedVoters = [...voters].sort((a, b) => b.createdAt - a.createdAt);
-  const filteredVoters = sortedVoters.filter(v => v.code.includes(searchVoter));
+  const filteredVoters = sortedVoters.filter(v => {
+    const searchTerm = searchVoter.toLowerCase();
+    return v.code.includes(searchTerm) || (v.tag && v.tag.toLowerCase().includes(searchTerm));
+  });
 
-  // =======================================================================
-  // TELA DE IMPRESSÃO EXCLUSIVA DO MOBILE
-  // =======================================================================
-  if (isPrintingMode) {
-    return (
-      <div className="bg-white min-h-screen font-sans text-black">
-        <style>{`
-          @media print {
-            @page { margin: 0; size: 58mm auto; }
-            body { background: white !important; margin: 0; padding: 0; }
-            .no-print { display: none !important; }
-            .ticket { width: 58mm !important; padding: 5mm !important; text-align: center; box-sizing: border-box; page-break-after: always; margin: 0 auto; }
-            .ticket:last-child { page-break-after: auto !important; }
-          }
-        `}</style>
-        
-        {/* Header fixo com instruções e botões */}
-        <div className="no-print bg-slate-50 p-4 border-b border-slate-200 flex flex-col items-center sticky top-0 z-50 shadow-sm">
-          <p className="text-slate-600 mb-4 text-center font-medium">
-            Se a janela de impressão não abrir sozinha, clique no botão abaixo.
-          </p>
-          
-          <Button 
-            onClick={() => window.print()} 
-            className="w-full max-w-sm bg-blue-600 hover:bg-blue-700 text-white text-xl py-6 mb-3 font-bold shadow-md"
-          >
-            🖨️ IMPRIMIR AGORA
-          </Button>
-          
-          <Button 
-            variant="ghost" 
-            onClick={() => { setIsPrintingMode(false); setPrintingVoters([]); }} 
-            className="w-full max-w-sm text-slate-500 font-bold"
-          >
-            Cancelar e Voltar
-          </Button>
-        </div>
-        
-        {/* A Área dos Tickets na Tela Cheia */}
-        <div className="flex flex-col items-center py-4 bg-white">
-          {printingVoters.map((v, index) => (
-            <div 
-              key={v.code} 
-              className="ticket" 
-              style={{ 
-                width: '58mm', 
-                padding: '5mm', 
-                textAlign: 'center', 
-                boxSizing: 'border-box',
-                margin: '0 auto',
-                pageBreakAfter: index === printingVoters.length - 1 ? 'auto' : 'always',
-                borderBottom: index === printingVoters.length - 1 ? 'none' : '1px dashed #ccc' 
-              }}
-            >
-              <h2 style={{fontSize:'14px', margin:0, fontWeight: 'bold', color: 'black'}}>IPB NOVA BRASÍLIA</h2>
-              <p style={{fontSize:'10px', margin:'2px 0 10px', fontWeight: 'bold', color: 'black'}}>ASSEMBLEIA EXTRAORDINÁRIA</p>
-              
-              <div style={{borderTop:'1px dashed #000', borderBottom:'1px dashed #000', padding:'10px 0', margin:'10px 0'}}>
-                <span style={{fontSize:'10px', fontWeight: 'bold', color: 'black'}}>CÓDIGO DE ACESSO</span>
-                <div style={{fontSize:'36px', fontWeight:'bold', fontFamily:'monospace', color: 'black'}}>{v.code}</div>
-              </div>
-              
-              <div style={{display:'flex', justifyContent:'center', margin:'10px 0'}}>
-                {/* CANVAS É OBRIGATÓRIO AQUI PARA BLINDAR A MEMÓRIA DO MOBILE */}
-                <QRCodeCanvas value={`https://vota.ipbnb.com.br/urna?codigo=${v.code}`} size={140} level="M" />
-              </div>
-              
-              <p style={{fontSize:'10px', lineHeight:'1.2', marginTop: '10px', color: 'black'}}>
-                Aponte a câmera do celular para este<br/>QR Code e a urna abrirá sozinha.
-              </p>
-              <p style={{fontSize:'8px', opacity:0.6, marginTop: '5px', color: 'black'}}>
-                Uso único e intransferível.
-              </p>
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  // =======================================================================
-  // PAINEL DE ADMINISTRAÇÃO NORMAL
-  // =======================================================================
   return (
     <>
       <style>{`
+        /* A Div Invisível que funciona no PC (e vamos testar no mobile agora) */
         @media screen { 
           .print-container { 
-            position: fixed;
-            left: -9999px;
-            top: -9999px;
-            opacity: 0;
-            pointer-events: none;
-            z-index: -1;
+            position: absolute !important;
+            width: 1px !important;
+            height: 1px !important;
+            padding: 0 !important;
+            margin: -1px !important;
+            overflow: hidden !important;
+            clip: rect(0, 0, 0, 0) !important;
+            white-space: nowrap !important;
+            border: 0 !important;
           } 
         }
+
+        /* Regras de formatação do papel térmico */
         @media print {
           @page { margin: 0; size: 58mm auto; }
           html, body { height: auto !important; overflow: visible !important; background: white !important; margin: 0 !important; padding: 0 !important; }
@@ -474,7 +408,6 @@ export default function Admin() {
 
         <main className="max-w-5xl mx-auto p-4 md:p-6 space-y-6">
           
-          {/* MÓDULO DE USUÁRIOS PENDENTES */}
           {currentUser.isAdmin && pendingUsers.length > 0 && (
             <Card className="border-gold bg-gold/5">
               <CardHeader>
@@ -503,7 +436,6 @@ export default function Admin() {
             </Card>
           )}
 
-          {/* NOVO: BOTÃO ELEGANTE PARA GERENCIAR ACESSOS (Abre Modal) */}
           {currentUser.isAdmin && approvedUsers.length > 0 && (
             <div className="flex justify-end">
                <Button 
@@ -538,26 +470,11 @@ export default function Admin() {
               </CardTitle>
             </CardHeader>
             <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              <div>
-                <Label>Título da Eleição</Label>
-                <SyncInput value={state.title || ''} onChange={(val: string) => handleSaveElection('title', val)} />
-              </div>
-              <div>
-                <Label>Data</Label>
-                <SyncInput type="date" value={state.date || ''} onChange={(val: string) => handleSaveElection('date', val)} />
-              </div>
-              <div>
-                <Label>Meta de Votantes (Opcional)</Label>
-                <SyncInput type="number" min={0} value={state.voterGoal?.toString() || ''} onChange={(val: string) => handleSaveElection('voterGoal', parseInt(val) || 0)} />
-              </div>
-              <div>
-                <Label>Vagas Presbíteros</Label>
-                <SyncInput type="number" min={0} value={state.presbyterSlots?.toString() || ''} onChange={(val: string) => handleSaveElection('presbyterSlots', parseInt(val) || 0)} />
-              </div>
-              <div>
-                <Label>Vagas Diáconos</Label>
-                <SyncInput type="number" min={0} value={state.deaconSlots?.toString() || ''} onChange={(val: string) => handleSaveElection('deaconSlots', parseInt(val) || 0)} />
-              </div>
+              <div><Label>Título da Eleição</Label><SyncInput value={state.title || ''} onChange={(val: string) => handleSaveElection('title', val)} /></div>
+              <div><Label>Data</Label><SyncInput type="date" value={state.date || ''} onChange={(val: string) => handleSaveElection('date', val)} /></div>
+              <div><Label>Meta de Votantes (Opcional)</Label><SyncInput type="number" min={0} value={state.voterGoal?.toString() || ''} onChange={(val: string) => handleSaveElection('voterGoal', parseInt(val) || 0)} /></div>
+              <div><Label>Vagas Presbíteros</Label><SyncInput type="number" min={0} value={state.presbyterSlots?.toString() || ''} onChange={(val: string) => handleSaveElection('presbyterSlots', parseInt(val) || 0)} /></div>
+              <div><Label>Vagas Diáconos</Label><SyncInput type="number" min={0} value={state.deaconSlots?.toString() || ''} onChange={(val: string) => handleSaveElection('deaconSlots', parseInt(val) || 0)} /></div>
             </CardContent>
           </Card>
 
@@ -573,7 +490,7 @@ export default function Admin() {
                 </Badge>
               </div>
               <p className="text-sm text-muted-foreground mt-1">
-                Gere códigos únicos de 6 dígitos e QR Codes para permitir que os membros votem pelos seus próprios smartphones.
+                Gere códigos, imprima QR Codes e adicione <strong>Nomes (Tags)</strong> para rastrear quem recebeu qual papel.
               </p>
             </CardHeader>
             <CardContent className="pt-6 space-y-6">
@@ -611,11 +528,11 @@ export default function Admin() {
                 <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
                   <div className="relative w-full max-w-sm">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    {/* A Busca agora não bloqueia letras, permitindo buscar pelas TAGS */}
                     <Input 
-                      placeholder="Pesquisar código (ex: 123456)..." 
+                      placeholder="Pesquisar código ou nome..." 
                       value={searchVoter}
-                      onChange={(e) => setSearchVoter(e.target.value.replace(/[^0-9]/g, ''))}
-                      maxLength={6}
+                      onChange={(e) => setSearchVoter(e.target.value)}
                       className="pl-9 bg-background"
                     />
                   </div>
@@ -633,22 +550,24 @@ export default function Admin() {
               )}
 
               {filteredVoters.length > 0 ? (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 md:gap-3 max-h-[300px] overflow-y-auto p-2 border rounded-lg bg-card">
+                // O GRID: Ajustado para acomodar o layout empilhado de cada cartão no mobile
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 max-h-[400px] overflow-y-auto p-2 border rounded-lg bg-card">
                   {filteredVoters.map(v => {
                     const hasVotedCurrentRound = isVotingOpen && currentScrutiny?.authMode === 'code' && votedCodesList.includes(v.code);
                     
                     return (
                       <div 
                         key={v.code} 
-                        className={`flex items-center justify-between p-1.5 md:p-2 border rounded-md transition-colors ${hasVotedCurrentRound ? 'bg-success/10 border-success/30' : 'bg-muted'}`}
+                        // O NOVO CARTÃO DO ELEITOR: Layout vertical (flex-col) para economizar espaço e não espremer os botões
+                        className={`flex flex-col p-2 border rounded-md transition-colors shadow-sm ${hasVotedCurrentRound ? 'bg-success/10 border-success/30' : 'bg-muted/30'}`}
                       >
-                        <div className="flex flex-col">
-                          <span className={`font-mono font-bold text-base md:text-lg tracking-wider md:tracking-widest pl-1 ${hasVotedCurrentRound ? 'text-success-foreground' : ''}`}>
+                        {/* Linha 1: Código e Status */}
+                        <div className="flex items-start justify-between mb-1">
+                          <span className={`font-mono font-bold text-base md:text-lg tracking-wider ${hasVotedCurrentRound ? 'text-success-foreground' : 'text-slate-800'}`}>
                             {v.code}
                           </span>
-                          
                           {isVotingOpen && currentScrutiny?.authMode === 'code' && (
-                            <div className="pl-1 mt-0.5">
+                            <div>
                               {hasVotedCurrentRound ? (
                                 <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-success/20 text-success uppercase tracking-wider">✓ Votou</span>
                               ) : (
@@ -658,13 +577,34 @@ export default function Admin() {
                           )}
                         </div>
 
-                        <div className="flex items-center">
-                          <Button variant="ghost" size="icon" className="h-6 w-6 md:h-7 md:w-7 text-muted-foreground hover:text-blue-600" onClick={() => handlePrint([v])} title="Imprimir este">
-                            <Printer className="w-3.5 h-3.5" />
+                        {/* Linha 2: O Nome (Tag) */}
+                        <div className="text-xs text-muted-foreground truncate h-5 mb-1" title={v.tag || "Sem nome"}>
+                          {v.tag ? (
+                            <span className="font-semibold text-slate-700">{v.tag}</span>
+                          ) : (
+                            <span className="italic opacity-50 text-[10px]">Sem nome</span>
+                          )}
+                        </div>
+
+                        {/* Linha 3: Os Botões de Ação (Alinhados perfeitamente) */}
+                        <div className="flex items-center justify-between border-t border-border/50 pt-2 mt-auto">
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-7 w-7 bg-blue-100/50 hover:bg-blue-100 text-blue-700" 
+                            onClick={() => openTagModal(v)} 
+                            title="Adicionar/Editar Nome"
+                          >
+                            <Tag className="w-3.5 h-3.5" />
                           </Button>
-                          <Button variant="ghost" size="icon" className="h-6 w-6 md:h-7 md:w-7 text-muted-foreground hover:text-destructive" onClick={() => handleDeleteSingleVoter(v.code)} title="Excluir este">
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </Button>
+                          <div className="flex gap-1">
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-500 hover:bg-slate-200 hover:text-slate-800" onClick={() => handlePrint([v])} title="Imprimir este">
+                              <Printer className="w-3.5 h-3.5" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-500 hover:bg-red-100 hover:text-destructive" onClick={() => handleDeleteSingleVoter(v.code)} title="Excluir este">
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </Button>
+                          </div>
                         </div>
                       </div>
                     );
@@ -673,13 +613,14 @@ export default function Admin() {
               ) : (
                 voters.length > 0 && (
                   <p className="text-center text-muted-foreground py-4 border rounded-lg bg-muted/20">
-                    Nenhum código encontrado.
+                    Nenhum resultado encontrado.
                   </p>
                 )
               )}
             </CardContent>
           </Card>
 
+          {/* O resto da tela continua normal... */}
           <Card>
             <CardHeader>
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -919,7 +860,45 @@ export default function Admin() {
         </main>
       </div>
 
-      {/* JANELA: CÓDIGOS PENDENTES (Faltam Votar) */}
+      {/* JANELA DO NOME (TAG) PARA O ELEITOR */}
+      {taggingVoterCode && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-[100] no-print">
+          <Card className="w-full max-w-sm shadow-2xl flex flex-col">
+            <CardHeader className="shrink-0 border-b pb-4">
+              <CardTitle className="text-xl flex items-center gap-2">
+                <Tag className="w-5 h-5 text-blue-600" /> Identificar Eleitor
+              </CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Código: <strong className="font-mono text-black">{taggingVoterCode}</strong>
+              </p>
+            </CardHeader>
+            <CardContent className="p-4">
+              <div className="space-y-3">
+                <Label>Nome ou Apelido (Tag)</Label>
+                <Input 
+                  placeholder="Ex: Irmão João Silva" 
+                  value={newTagValue}
+                  onChange={(e) => setNewTagValue(e.target.value)}
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleSaveTag();
+                  }}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Use isto para saber para quem você entregou este QR Code. 
+                  Facilita a exclusão se ele perder o papel.
+                </p>
+              </div>
+            </CardContent>
+            <div className="p-4 border-t shrink-0 flex justify-end gap-2 bg-slate-50">
+              <Button variant="outline" onClick={() => setTaggingVoterCode(null)}>Cancelar</Button>
+              <Button className="bg-blue-600 hover:bg-blue-700 text-white" onClick={handleSaveTag}>Salvar Nome</Button>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* JANELA DE CÓDIGOS PENDENTES */}
       {showPendingModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-[100] no-print">
           <Card className="w-full max-w-md shadow-2xl flex flex-col max-h-[85vh]">
@@ -932,10 +911,11 @@ export default function Admin() {
               </p>
             </CardHeader>
             <CardContent className="overflow-y-auto flex-1 p-4 bg-muted/30">
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                 {voters.filter(v => !votedCodesList.includes(v.code)).map(v => (
-                  <div key={v.code} className="p-2 bg-white border border-yellow-500/30 rounded-md text-center font-mono font-bold text-sm shadow-sm text-yellow-900">
-                    {v.code}
+                  <div key={v.code} className="p-2 bg-white border border-yellow-500/30 rounded-md text-center shadow-sm flex flex-col items-center justify-center">
+                    <span className="font-mono font-bold text-sm text-yellow-900">{v.code}</span>
+                    {v.tag && <span className="text-[10px] text-muted-foreground truncate w-full mt-1" title={v.tag}>{v.tag}</span>}
                   </div>
                 ))}
                 {voters.filter(v => !votedCodesList.includes(v.code)).length === 0 && (
@@ -955,7 +935,7 @@ export default function Admin() {
         </div>
       )}
 
-      {/* NOVO: JANELA DE GERENCIAR USUÁRIOS APROVADOS (MODAL) */}
+      {/* JANELA DE GERENCIAR USUÁRIOS APROVADOS (MODAL) */}
       {showManageUsersModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-[100] no-print">
           <Card className="w-full max-w-md shadow-2xl flex flex-col max-h-[85vh]">
@@ -1000,8 +980,8 @@ export default function Admin() {
         </div>
       )}
 
-      {/* MÓDULO DE IMPRESSÃO (NO PC FICA INVISÍVEL, NO MOBILE FICA INVISÍVEL ATÉ TROCAR A TELA) */}
-      {!isPrintingMode && printingVoters.length > 0 && (
+      {/* MÓDULO DE IMPRESSÃO (NO PC E NO MOBILE FICA INVISÍVEL - TÉCNICA RAIZ) */}
+      {printingVoters.length > 0 && (
         <div className="print-container font-sans text-black bg-white">
           {printingVoters.map((v, index) => (
             <div 
@@ -1018,10 +998,12 @@ export default function Admin() {
               <div style={{borderTop:'1px dashed #000', borderBottom:'1px dashed #000', padding:'10px 0', margin:'10px 0'}}>
                 <span style={{fontSize:'10px', fontWeight: 'bold'}}>CÓDIGO DE ACESSO</span>
                 <div style={{fontSize:'36px', fontWeight:'bold', fontFamily:'monospace'}}>{v.code}</div>
+                {/* Se tiver tag cadastrada, imprime no papel pequenininho */}
+                {v.tag && <div style={{fontSize:'10px', fontWeight:'normal', marginTop:'4px'}}>{v.tag}</div>}
               </div>
               
               <div style={{display:'flex', justifyContent:'center', margin:'10px 0'}}>
-                {/* NÍVEL "M" E CANVAS PARA PROTEGER A MEMÓRIA DO CELULAR */}
+                {/* CANVAS PARA O CELULAR NÃO TRAVAR */}
                 <QRCodeCanvas value={`https://vota.ipbnb.com.br/urna?codigo=${v.code}`} size={140} level="M" />
               </div>
               
