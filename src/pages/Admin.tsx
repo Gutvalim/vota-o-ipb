@@ -9,10 +9,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
-// Mantemos o Canvas para blindar a memória do celular
-import { QRCodeCanvas } from 'qrcode.react';
+import { QRCodeSVG } from 'qrcode.react';
 import {
-  ArrowLeft, Plus, Trash2, Play, Square, AlertTriangle, Users, Award, RotateCcw, UserPlus, LogOut, CheckCircle2, XCircle, ShieldCheck, Eye, QrCode, Printer, Smartphone, Tablet, Search, UserMinus, Settings, Tag
+  ArrowLeft, Plus, Trash2, Play, Square, AlertTriangle, Users, Award, RotateCcw, UserPlus, LogOut, CheckCircle2, XCircle, ShieldCheck, Eye, QrCode, Printer, Smartphone, Tablet, Search, UserMinus, Settings, Tag, Edit
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -64,7 +63,6 @@ export default function Admin() {
   const [showPendingModal, setShowPendingModal] = useState(false);
   const [showManageUsersModal, setShowManageUsersModal] = useState(false);
 
-  // Estados para o novo sistema de Tags (Nomes)
   const [taggingVoterCode, setTaggingVoterCode] = useState<string | null>(null);
   const [newTagValue, setNewTagValue] = useState('');
 
@@ -92,6 +90,8 @@ export default function Admin() {
   
   const voters = state.voters || [];
   const votedCodesList = currentScrutiny?.votedCodes || [];
+
+  const importantAlerts = state.alerts.filter(alert => !alert.toLowerCase().includes('vencimento'));
 
   const handleSaveElection = (field: string, value: string | number) => {
     dispatch({ type: 'SET_ELECTION', payload: { [field]: value } });
@@ -277,7 +277,6 @@ export default function Admin() {
     return { remainingSlots, nextRound, alreadyElected };
   };
 
-  // Funções de Eleitores (Voters)
   const handleGenerateVoters = () => {
     const count = parseInt(voterCountToGenerate.toString());
     if (isNaN(count) || count <= 0 || count > 500) {
@@ -292,7 +291,6 @@ export default function Admin() {
         code = Math.floor(100000 + Math.random() * 900000).toString();
         isDuplicate = voters.some(v => v.code === code) || newVoters.some(v => v.code === code);
       } while (isDuplicate);
-      // Incluímos a propriedade tag opcional vazia na criação
       newVoters.push({ code, createdAt: Date.now(), tag: '' });
     }
     dispatch({ type: 'ADD_VOTERS', payload: newVoters });
@@ -315,7 +313,6 @@ export default function Admin() {
     }
   };
 
-  // Função para salvar a TAG do eleitor
   const handleSaveTag = () => {
     if (!taggingVoterCode) return;
     
@@ -334,20 +331,80 @@ export default function Admin() {
     setNewTagValue(voter.tag || '');
   };
 
-  // A IMPRESSÃO RAIZ (Na mesma página, tanto PC quanto Mobile)
   const handlePrint = (votersToPrint: Voter[]) => {
     if (votersToPrint.length === 0) return;
 
-    // Jogamos os tickets na memória. O CSS cuidará do resto.
-    setPrintingVoters(votersToPrint);
+    const isMobile = window.innerWidth <= 768 || /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
 
-    // Damos 800ms pro React desenhar o Canvas.
-    setTimeout(() => {
-      window.print();
-    }, 800);
+    if (isMobile) {
+      const printWindow = window.open('', '_blank');
+      
+      if (!printWindow) {
+        toast.error("Pop-up bloqueado! Permita pop-ups nas configurações do seu navegador.", { duration: 6000 });
+        return;
+      }
+
+      setPrintingVoters(votersToPrint);
+
+      setTimeout(() => {
+        const container = document.querySelector('.print-container');
+        if (container) {
+          printWindow.document.write(`
+            <!DOCTYPE html>
+            <html lang="pt-BR">
+            <head>
+              <meta charset="UTF-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <title>Imprimir Tickets</title>
+              <style>
+                @page { margin: 0; size: 58mm auto; }
+                body { font-family: sans-serif; background: white; margin: 0; padding: 10px; color: black; }
+                .instruction-box {
+                  background-color: #f8fafc;
+                  border: 2px dashed #94a3b8;
+                  border-radius: 12px;
+                  padding: 20px;
+                  text-align: center;
+                  margin-bottom: 20px;
+                }
+                .instruction-box h3 { margin-top: 0; color: #0f172a; }
+                .instruction-box p { color: #334155; font-size: 14px; margin-bottom: 0; }
+                .ticket-area { display: flex; flex-direction: column; align-items: center; }
+                .ticket { width: 58mm; padding: 5mm; text-align: center; box-sizing: border-box; margin: 0 auto; page-break-after: always; }
+                .ticket:last-child { page-break-after: auto !important; }
+                h2 { font-size: 14px; margin: 0; font-weight: bold; }
+                p { margin: 0; }
+                svg { max-width: 100%; height: auto; }
+                @media print {
+                  .instruction-box { display: none !important; }
+                  body { padding: 0; }
+                }
+              </style>
+            </head>
+            <body>
+              <div class="instruction-box">
+                <h3>🖨️ Página Pronta para Impressão</h3>
+                <p>Abra o menu do seu navegador e escolha <strong>"Imprimir"</strong> ou <strong>"Compartilhar > Imprimir"</strong>.</p>
+              </div>
+              <div class="ticket-area">
+                ${container.innerHTML}
+              </div>
+            </body>
+            </html>
+          `);
+          printWindow.document.close();
+        }
+        setPrintingVoters([]);
+      }, 500);
+
+    } else {
+      setPrintingVoters(votersToPrint);
+      setTimeout(() => {
+        window.print();
+      }, 800);
+    }
   };
 
-  // Filtro de Busca (agora pesquisa pelo CÓDIGO ou pelo NOME/TAG)
   const sortedVoters = [...voters].sort((a, b) => b.createdAt - a.createdAt);
   const filteredVoters = sortedVoters.filter(v => {
     const searchTerm = searchVoter.toLowerCase();
@@ -357,7 +414,6 @@ export default function Admin() {
   return (
     <>
       <style>{`
-        /* A Div Invisível que funciona no PC e no mobile */
         @media screen { 
           .print-container { 
             position: absolute !important;
@@ -371,8 +427,6 @@ export default function Admin() {
             border: 0 !important;
           } 
         }
-
-        /* Regras de formatação do papel térmico */
         @media print {
           @page { margin: 0; size: 58mm auto; }
           html, body { height: auto !important; overflow: visible !important; background: white !important; margin: 0 !important; padding: 0 !important; }
@@ -381,6 +435,35 @@ export default function Admin() {
           .ticket { width: 58mm !important; padding: 5mm !important; text-align: center; box-sizing: border-box; }
         }
       `}</style>
+
+      {/* POP-UP GIGANTE DE ALERTA OBRIGATÓRIO (MODAL) */}
+      {importantAlerts.length > 0 && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-[200] no-print">
+          <Card className="w-full max-w-md shadow-2xl border-gold border-2 overflow-hidden bg-white">
+            <CardHeader className="bg-gold/10 border-b border-gold/30 pb-4">
+              <CardTitle className="text-xl text-yellow-700 flex items-center gap-2 justify-center font-black uppercase">
+                <Award className="w-8 h-8 text-gold" />
+                Atenção: Resultado Atingido
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-8 pb-8 space-y-4 text-center">
+              {importantAlerts.map((alert, i) => (
+                <p key={i} className="text-lg font-bold text-slate-800 leading-relaxed">
+                  {alert}
+                </p>
+              ))}
+            </CardContent>
+            <div className="p-0 border-t border-border">
+              <Button 
+                onClick={() => dispatch({ type: 'CLEAR_ALERTS' })} 
+                className="bg-gold hover:bg-yellow-500 text-black font-black w-full text-lg py-8 rounded-none transition-all"
+              >
+                CIENTE. FECHAR AVISO.
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
 
       <div className="min-h-screen bg-background no-print pb-10">
         <header className="bg-primary text-primary-foreground p-4 shadow-lg">
@@ -444,20 +527,6 @@ export default function Admin() {
                  Gerenciar Acessos do Sistema
                </Button>
             </div>
-          )}
-
-          {state.alerts.length > 0 && (
-            <Card className="border-gold bg-gold/5">
-              <CardContent className="pt-4">
-                {state.alerts.map((alert, i) => (
-                  <div key={i} className="flex items-start gap-2 text-sm mb-2">
-                    <AlertTriangle className="w-4 h-4 text-gold shrink-0 mt-0.5" />
-                    <span>{alert}</span>
-                  </div>
-                ))}
-                <Button variant="ghost" size="sm" onClick={() => dispatch({ type: 'CLEAR_ALERTS' })} className="mt-2 text-muted-foreground">Limpar alertas</Button>
-              </CardContent>
-            </Card>
           )}
 
           <Card>
@@ -546,7 +615,6 @@ export default function Admin() {
               )}
 
               {filteredVoters.length > 0 ? (
-                // O GRID EMPILHADO PERFEITO PARA MOBILE
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 max-h-[400px] overflow-y-auto p-2 border rounded-lg bg-card">
                   {filteredVoters.map(v => {
                     const hasVotedCurrentRound = isVotingOpen && currentScrutiny?.authMode === 'code' && votedCodesList.includes(v.code);
@@ -556,7 +624,6 @@ export default function Admin() {
                         key={v.code} 
                         className={`flex flex-col p-2 border rounded-md transition-colors shadow-sm ${hasVotedCurrentRound ? 'bg-success/10 border-success/30' : 'bg-muted/30'}`}
                       >
-                        {/* Linha 1: Código e Status */}
                         <div className="flex items-start justify-between mb-1">
                           <span className={`font-mono font-bold text-base md:text-lg tracking-wider ${hasVotedCurrentRound ? 'text-success-foreground' : 'text-slate-800'}`}>
                             {v.code}
@@ -572,7 +639,6 @@ export default function Admin() {
                           )}
                         </div>
 
-                        {/* Linha 2: O Nome (Tag) */}
                         <div className="text-xs text-muted-foreground truncate h-5 mb-1" title={v.tag || "Sem nome"}>
                           {v.tag ? (
                             <span className="font-semibold text-slate-700">{v.tag}</span>
@@ -581,7 +647,6 @@ export default function Admin() {
                           )}
                         </div>
 
-                        {/* Linha 3: Os Botões (Alinhados no rodapé) */}
                         <div className="flex items-center justify-between border-t border-border/50 pt-2 mt-auto">
                           <Button 
                             variant="ghost" 
@@ -652,8 +717,8 @@ export default function Admin() {
                     </div>
                   </div>
                   <div className="flex gap-2">
-                    <Button size="sm" onClick={handleAddCandidate}>{editingCandidate ? 'Salvar' : 'Adicionar'}</Button>
-                    <Button size="sm" variant="ghost" onClick={() => setShowCandidateForm(false)}>Cancelar</Button>
+                    <Button size="sm" onClick={handleAddCandidate}>{editingCandidate ? 'Salvar Edição' : 'Adicionar Candidato'}</Button>
+                    <Button size="sm" variant="ghost" onClick={() => { setShowCandidateForm(false); setEditingCandidate(null); }}>Cancelar</Button>
                   </div>
                 </div>
               )}
@@ -670,9 +735,35 @@ export default function Admin() {
                         <p className="font-semibold text-sm truncate">{c.name}</p>
                         <Badge variant="secondary" className="text-xs">{ROLE_LABELS[c.currentRole]}</Badge>
                       </div>
-                      <Button variant="ghost" size="icon" className="shrink-0 text-muted-foreground hover:text-destructive" onClick={() => dispatch({ type: 'REMOVE_CANDIDATE', payload: c.id })} disabled={isVotingOpen}>
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
+                      
+                      {/* BOTÕES DE AÇÃO DOS CANDIDATOS (Agora com opção de EDITAR) */}
+                      <div className="flex items-center gap-1 shrink-0">
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="text-muted-foreground hover:text-blue-600 hover:bg-blue-50" 
+                          onClick={() => {
+                            setForm({ name: c.name, photo: c.photo || '', birthDate: c.birthDate, currentRole: c.currentRole });
+                            setEditingCandidate(c);
+                            setShowCandidateForm(true);
+                            window.scrollTo({ top: 0, behavior: 'smooth' }); // Rola pro form
+                          }} 
+                          disabled={isVotingOpen} 
+                          title="Editar Candidato"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="text-muted-foreground hover:text-destructive hover:bg-red-50" 
+                          onClick={() => dispatch({ type: 'REMOVE_CANDIDATE', payload: c.id })} 
+                          disabled={isVotingOpen} 
+                          title="Excluir Candidato"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -974,7 +1065,7 @@ export default function Admin() {
         </div>
       )}
 
-      {/* MÓDULO DE IMPRESSÃO (NO PC E NO MOBILE FICA INVISÍVEL - TÉCNICA RAIZ) */}
+      {/* MÓDULO DE IMPRESSÃO (NO PC FICA INVISÍVEL - TÉCNICA DA NOVA ABA) */}
       {printingVoters.length > 0 && (
         <div className="print-container font-sans text-black bg-white">
           {printingVoters.map((v, index) => (
@@ -987,26 +1078,38 @@ export default function Admin() {
               }}
             >
               <h2 style={{fontSize:'14px', margin:0, fontWeight: 'bold'}}>IPB NOVA BRASÍLIA</h2>
-              <p style={{fontSize:'10px', margin:'2px 0 10px', fontWeight: 'bold'}}>ASSEMBLEIA EXTRAORDINÁRIA</p>
+              
+              <p style={{fontSize:'10px', margin:'2px 0 2px', fontWeight: 'bold', textTransform: 'uppercase'}}>
+                {state.title || 'ASSEMBLEIA EXTRAORDINÁRIA'}
+              </p>
+              
+              {state.date && (
+                <p style={{fontSize:'10px', margin:'0 0 10px'}}>
+                  {new Date(state.date + 'T00:00:00').toLocaleDateString('pt-BR')}
+                </p>
+              )}
               
               <div style={{borderTop:'1px dashed #000', borderBottom:'1px dashed #000', padding:'10px 0', margin:'10px 0'}}>
                 <span style={{fontSize:'10px', fontWeight: 'bold'}}>CÓDIGO DE ACESSO</span>
                 <div style={{fontSize:'36px', fontWeight:'bold', fontFamily:'monospace'}}>{v.code}</div>
-                {/* Se tiver tag cadastrada, imprime no papel pequenininho */}
                 {v.tag && <div style={{fontSize:'10px', fontWeight:'normal', marginTop:'4px'}}>{v.tag}</div>}
               </div>
               
               <div style={{display:'flex', justifyContent:'center', margin:'10px 0'}}>
-                {/* CANVAS PARA O CELULAR NÃO TRAVAR */}
-                <QRCodeCanvas value={`https://vota.ipbnb.com.br/urna?codigo=${v.code}`} size={140} level="M" />
+                <QRCodeSVG value={`https://vota.ipbnb.com.br/urna?codigo=${v.code}`} size={140} level="M" />
               </div>
               
-              <p style={{fontSize:'10px', lineHeight:'1.2', marginTop: '10px'}}>
+              <p style={{fontSize:'9px', lineHeight:'1.2', marginTop: '10px'}}>
                 Aponte a câmera do celular para este<br/>QR Code e a urna abrirá sozinha.
               </p>
-              <p style={{fontSize:'8px', opacity:0.6, marginTop: '5px'}}>
-                Uso único e intransferível.
+              
+              <p style={{fontSize:'9px', fontWeight:'bold', marginTop: '8px', padding: '0 5px'}}>
+                Senha pessoal e intransferível.<br/>Guarde este papel para uso em<br/>todos os escrutínios.
               </p>
+              
+              <div style={{marginTop: '15px', borderBottom: '1px dashed #000', width: '100%'}}></div>
+              <div style={{height: '15px'}}></div>
+              
             </div>
           ))}
         </div>
