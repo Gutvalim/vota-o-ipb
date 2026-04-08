@@ -9,8 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
-// Mantemos o Canvas para blindar a memória do celular na técnica de impressão invisível
-import { QRCodeCanvas } from 'qrcode.react';
+import { QRCodeSVG } from 'qrcode.react';
 import {
   ArrowLeft, Plus, Trash2, Play, Square, AlertTriangle, Users, Award, RotateCcw, UserPlus, LogOut, CheckCircle2, XCircle, ShieldCheck, Eye, QrCode, Printer, Smartphone, Tablet, Search, UserMinus, Settings, Tag, Edit
 } from 'lucide-react';
@@ -92,7 +91,6 @@ export default function Admin() {
   const voters = state.voters || [];
   const votedCodesList = currentScrutiny?.votedCodes || [];
 
-  // FILTRO INTELIGENTE DE ALERTAS (Não mostra diácono em vencimento)
   const importantAlerts = state.alerts.filter(alert => !alert.toLowerCase().includes('vencimento'));
 
   const handleSaveElection = (field: string, value: string | number) => {
@@ -334,18 +332,101 @@ export default function Admin() {
   };
 
   // =======================================================================
-  // A IMPRESSÃO RAIZ (Na mesma página, via CSS invisível)
+  // A IMPRESSÃO VIA NOVA ABA (MOBILE) COM BOTÃO E AUTO-PRINT
   // =======================================================================
   const handlePrint = (votersToPrint: Voter[]) => {
     if (votersToPrint.length === 0) return;
 
-    // Jogamos os tickets na memória. O CSS da div invisível cuidará do resto.
-    setPrintingVoters(votersToPrint);
+    const isMobile = window.innerWidth <= 768 || /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
 
-    // Damos 800ms pro React desenhar o Canvas.
-    setTimeout(() => {
-      window.print();
-    }, 800);
+    if (isMobile) {
+      const printWindow = window.open('', '_blank');
+      
+      if (!printWindow) {
+        toast.error("Pop-up bloqueado! Permita pop-ups nas configurações do seu navegador.", { duration: 6000 });
+        return;
+      }
+
+      setPrintingVoters(votersToPrint);
+
+      setTimeout(() => {
+        const container = document.querySelector('.print-container');
+        if (container) {
+          printWindow.document.write(`
+            <!DOCTYPE html>
+            <html lang="pt-BR">
+            <head>
+              <meta charset="UTF-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <title>Imprimir Tickets</title>
+              <style>
+                @page { margin: 0; size: 58mm auto; }
+                body { font-family: sans-serif; background: white; margin: 0; padding: 10px; color: black; }
+                .instruction-box {
+                  background-color: #f8fafc;
+                  border: 2px dashed #94a3b8;
+                  border-radius: 12px;
+                  padding: 20px;
+                  text-align: center;
+                  margin-bottom: 20px;
+                }
+                .instruction-box h3 { margin-top: 0; color: #0f172a; }
+                .instruction-box p { color: #334155; font-size: 14px; margin-bottom: 15px; }
+                .print-btn {
+                  background-color: #2563eb;
+                  color: white;
+                  border: none;
+                  padding: 12px 24px;
+                  border-radius: 8px;
+                  font-size: 16px;
+                  font-weight: bold;
+                  width: 100%;
+                  max-width: 300px;
+                  cursor: pointer;
+                  box-shadow: 0 4px 6px rgba(37, 99, 235, 0.2);
+                }
+                .print-btn:active { background-color: #1d4ed8; }
+                .ticket-area { display: flex; flex-direction: column; align-items: center; }
+                .ticket { width: 58mm; padding: 5mm; text-align: center; box-sizing: border-box; margin: 0 auto; page-break-after: always; }
+                .ticket:last-child { page-break-after: auto !important; }
+                h2 { font-size: 14px; margin: 0; font-weight: bold; }
+                p { margin: 0; }
+                svg { max-width: 100%; height: auto; }
+                @media print {
+                  .instruction-box { display: none !important; }
+                  body { padding: 0; }
+                }
+              </style>
+            </head>
+            <body>
+              <div class="instruction-box">
+                <h3>🖨️ Página Pronta para Impressão</h3>
+                <p>Se a janela de impressão não abrir automaticamente, clique no botão abaixo:</p>
+                <button class="print-btn" onclick="window.print()">IMPRIMIR AGORA</button>
+              </div>
+              <div class="ticket-area">
+                ${container.innerHTML}
+              </div>
+              <script>
+                // Tenta chamar a impressão do celular automaticamente
+                setTimeout(function() {
+                  window.print();
+                }, 500);
+              </script>
+            </body>
+            </html>
+          `);
+          printWindow.document.close();
+        }
+        setPrintingVoters([]);
+      }, 500);
+
+    } else {
+      setPrintingVoters(votersToPrint);
+      setTimeout(() => {
+        window.print();
+      }, 800);
+    }
   };
 
   const sortedVoters = [...voters].sort((a, b) => b.createdAt - a.createdAt);
@@ -357,7 +438,6 @@ export default function Admin() {
   return (
     <>
       <style>{`
-        /* A Div Invisível que funciona no PC e mobile na técnica raiz */
         @media screen { 
           .print-container { 
             position: absolute !important;
@@ -372,7 +452,6 @@ export default function Admin() {
           } 
         }
 
-        /* Regras de formatação do papel térmico */
         @media print {
           @page { margin: 0; size: 58mm auto; }
           html, body { height: auto !important; overflow: visible !important; background: white !important; margin: 0 !important; padding: 0 !important; }
@@ -1011,7 +1090,7 @@ export default function Admin() {
         </div>
       )}
 
-      {/* MÓDULO DE IMPRESSÃO (NO PC E NO MOBILE FICA INVISÍVEL - TÉCNICA RAIZ) */}
+      {/* MÓDULO DE IMPRESSÃO (NO PC FICA INVISÍVEL - TÉCNICA DA NOVA ABA) */}
       {printingVoters.length > 0 && (
         <div className="print-container font-sans text-black bg-white">
           {printingVoters.map((v, index) => (
@@ -1044,8 +1123,7 @@ export default function Admin() {
               </div>
               
               <div style={{display:'flex', justifyContent:'center', margin:'10px 0'}}>
-                {/* CANVAS PARA A IMPRESSÃO RAIZ DIRETO NA PÁGINA */}
-                <QRCodeCanvas value={`https://vota.ipbnb.com.br/urna?codigo=${v.code}`} size={140} level="M" />
+                <QRCodeSVG value={`https://vota.ipbnb.com.br/urna?codigo=${v.code}`} size={140} level="M" />
               </div>
               
               <p style={{fontSize:'9px', lineHeight:'1.2', marginTop: '10px'}}>
