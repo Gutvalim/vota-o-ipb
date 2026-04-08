@@ -9,10 +9,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
-// Importação necessária para gerar os QRCodes
 import { QRCodeSVG } from 'qrcode.react';
 import {
-  ArrowLeft, Plus, Trash2, Play, Square, AlertTriangle, Users, Award, RotateCcw, UserPlus, LogOut, CheckCircle2, XCircle, ShieldCheck, Eye, QrCode, Printer, Smartphone, Tablet, Search
+  ArrowLeft, Plus, Trash2, Play, Square, AlertTriangle, Users, Award, RotateCcw, UserPlus, LogOut, CheckCircle2, XCircle, ShieldCheck, Eye, QrCode, Printer, Smartphone, Tablet, Search, UserMinus
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -48,7 +47,8 @@ function SyncInput({ value, onChange, ...props }: any) {
 
 export default function Admin() {
   const { state, dispatch } = useElection();
-  const { currentUser, users, logout, approveUser, rejectUser } = useAuth();
+  // Pegamos o deleteUser (caso exista) ou usamos o rejectUser como fallback para exclusão
+  const { currentUser, users, logout, approveUser, rejectUser, deleteUser } = useAuth() as any;
   const navigate = useNavigate();
 
   const [showCandidateForm, setShowCandidateForm] = useState(false);
@@ -57,13 +57,22 @@ export default function Admin() {
   const [startingScrutinyType, setStartingScrutinyType] = useState<ScrutinyType | null>(null);
   const [selectedParticipants, setSelectedParticipants] = useState<string[]>([]);
 
-  // Estados para o Gerenciamento de Eleitores (QRCodes)
   const [voterCountToGenerate, setVoterCountToGenerate] = useState<number | string>(1);
   const [printingVoters, setPrintingVoters] = useState<Voter[]>([]);
   const [searchVoter, setSearchVoter] = useState('');
+  
   const [showPendingModal, setShowPendingModal] = useState(false);
+
   const [authMode, setAuthMode] = useState<'pin' | 'code'>('pin');
   const [customPin, setCustomPin] = useState('4321');
+
+  useEffect(() => {
+    const handleAfterPrint = () => {
+      setPrintingVoters([]);
+    };
+    window.addEventListener('afterprint', handleAfterPrint);
+    return () => window.removeEventListener('afterprint', handleAfterPrint);
+  }, []);
 
   if (!currentUser) {
     navigate('/login');
@@ -72,9 +81,25 @@ export default function Admin() {
 
   const currentScrutiny = state.scrutinies.find(s => s.id === state.currentScrutinyId);
   const isVotingOpen = currentScrutiny?.status === 'open';
-  const pendingUsers = users.filter(u => !u.approved);
+  
+  // Divisão de usuários (Pendentes vs Aprovados)
+  const pendingUsers = users.filter((u: any) => !u.approved);
+  const approvedUsers = users.filter((u: any) => u.approved && u.username !== currentUser.username);
+
   const voters = state.voters || [];
   const votedCodesList = currentScrutiny?.votedCodes || [];
+
+  // Função para remover um usuário aprovado do sistema
+  const handleRemoveUser = (username: string) => {
+    if (confirm(`Tem certeza que deseja REVOGAR O ACESSO do usuário '${username}'?`)) {
+      if (deleteUser) {
+        deleteUser(username);
+      } else {
+        rejectUser(username); // Fallback para deletar
+      }
+      toast.info(`Acesso de ${username} removido.`);
+    }
+  };
 
   const handleSaveElection = (field: string, value: string | number) => {
     dispatch({ type: 'SET_ELECTION', payload: { [field]: value } });
@@ -93,13 +118,11 @@ export default function Admin() {
         const MAX_HEIGHT = 300;
         let width = img.width;
         let height = img.height;
-
         if (width > height) {
           if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; }
         } else {
           if (height > MAX_HEIGHT) { width *= MAX_HEIGHT / height; height = MAX_HEIGHT; }
         }
-
         canvas.width = width;
         canvas.height = height;
         const ctx = canvas.getContext('2d');
@@ -151,7 +174,6 @@ export default function Admin() {
       if (lastScrutiny) {
         eligibleCandidates = eligibleCandidates.filter(c => lastScrutiny.participatingCandidateIds.includes(c.id));
       }
-
       if (nextRound >= 3 && lastScrutiny) {
         const sortedFromLast = Object.entries(lastScrutiny.votes)
           .filter(([id]) => lastScrutiny.participatingCandidateIds.includes(id) && !alreadyElected.includes(id))
@@ -162,22 +184,19 @@ export default function Admin() {
             if (!ca || !cb) return 0;
             return new Date(ca.birthDate).getTime() - new Date(cb.birthDate).getTime();
           });
-          
         const funnelCount = remainingSlots * 2;
         const funnelIds = sortedFromLast.slice(0, funnelCount).map(([id]) => id);
         eligibleCandidates = eligibleCandidates.filter(c => funnelIds.includes(c.id));
       }
-      
       initialSelected = eligibleCandidates.map(c => c.id);
     }
-
     setSelectedParticipants(initialSelected);
     setStartingScrutinyType(type);
     setAuthMode('pin'); 
     setCustomPin('4321');
   };
 
-  const handleConfirmStartScrutiny = () => {
+  const handleConfirmStartScrutiny = async () => {
     if (!startingScrutinyType) return;
     if (selectedParticipants.length === 0) {
       toast.error('Selecione pelo menos um candidato');
@@ -191,21 +210,24 @@ export default function Admin() {
       toast.error('Não há eleitores cadastrados. Vá na aba Gerenciar Eleitores primeiro.');
       return;
     }
-    
     const existingRounds = state.scrutinies.filter(s => s.type === startingScrutinyType).length;
-    dispatch({
-      type: 'START_SCRUTINY',
-      payload: { 
-        type: startingScrutinyType, 
-        round: existingRounds + 1, 
-        participatingCandidateIds: selectedParticipants,
-        authMode: authMode,
-        pin: authMode === 'pin' ? customPin : ""
-      },
-    });
-    toast.success(`Votação iniciada — ${existingRounds + 1}º escrutínio`);
-    setStartingScrutinyType(null);
-    setSelectedParticipants([]);
+    try {
+      await dispatch({
+        type: 'START_SCRUTINY',
+        payload: { 
+          type: startingScrutinyType, 
+          round: existingRounds + 1, 
+          participatingCandidateIds: selectedParticipants,
+          authMode: authMode,
+          pin: authMode === 'pin' ? customPin : ""
+        },
+      });
+      toast.success(`Votação iniciada no modo: ${authMode === 'pin' ? 'Tablet/Mesário' : 'Celular (QR Code)'}`);
+      setStartingScrutinyType(null);
+      setSelectedParticipants([]);
+    } catch (error: any) {
+      toast.error("Falha ao iniciar escrutínio no servidor: " + error.message);
+    }
   };
 
   const handleCloseScrutiny = () => {
@@ -228,7 +250,7 @@ export default function Admin() {
   };
 
   const handleReset = () => {
-    if (confirm('Tem certeza que deseja resetar toda a eleição? Os candidatos serão mantidos, mas os votos e vagas serão zerados.')) {
+    if (confirm('Tem certeza que deseja resetar toda a eleição? Os candidatos e códigos serão mantidos, mas os resultados zerados.')) {
       dispatch({ type: 'RESET' });
       toast.info('Eleição resetada.');
     }
@@ -255,7 +277,6 @@ export default function Admin() {
     return { remainingSlots, nextRound, alreadyElected };
   };
 
-  // Funções de Gerenciamento de Eleitores (QRCodes)
   const handleGenerateVoters = () => {
     const count = parseInt(voterCountToGenerate.toString());
     if (isNaN(count) || count <= 0 || count > 500) {
@@ -292,20 +313,94 @@ export default function Admin() {
     }
   };
 
+  // =======================================================================
+  // A ABORDAGEM DE NOVA ABA COM IMPRESSÃO MANUAL (MOBILE)
+  // =======================================================================
   const handlePrint = (votersToPrint: Voter[]) => {
-    if (votersToPrint.length === 0) {
-      toast.info("Não há códigos para imprimir.");
-      return;
+    if (votersToPrint.length === 0) return;
+
+    const isMobile = window.innerWidth <= 768 || /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+
+    if (isMobile) {
+      // Abre a aba síncrona imediatamente para driblar bloqueadores
+      // IMPORTANTE: Se o navegador não abrir nada, o bloqueador de pop-ups está bloqueando até cliques manuais.
+      const printWindow = window.open('', '_blank');
+      
+      if (!printWindow) {
+        toast.error("Pop-up bloqueado! Permita pop-ups nas configurações do seu navegador para imprimir.", { duration: 6000 });
+        return;
+      }
+
+      setPrintingVoters(votersToPrint);
+
+      // Espera 500ms para o React gerar os QRCodes e injeta na nova aba
+      setTimeout(() => {
+        const container = document.querySelector('.print-container');
+        if (container) {
+          printWindow.document.write(`
+            <!DOCTYPE html>
+            <html lang="pt-BR">
+            <head>
+              <meta charset="UTF-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <title>Imprimir Tickets IPB</title>
+              <style>
+                @page { margin: 0; size: 58mm auto; }
+                body { font-family: sans-serif; background: white; margin: 0; padding: 10px; color: black; }
+                
+                /* Instrução visual para o usuário */
+                .instruction-box {
+                  background-color: #f8fafc;
+                  border: 2px dashed #94a3b8;
+                  border-radius: 12px;
+                  padding: 20px;
+                  text-align: center;
+                  margin-bottom: 20px;
+                }
+                .instruction-box h3 { margin-top: 0; color: #0f172a; }
+                .instruction-box p { color: #334155; font-size: 14px; margin-bottom: 0; }
+
+                /* Estilo da Folha de Impressão */
+                .ticket-area { display: flex; flex-direction: column; align-items: center; }
+                .ticket { width: 58mm; padding: 5mm; text-align: center; box-sizing: border-box; margin: 0 auto; page-break-after: always; }
+                .ticket:last-child { page-break-after: auto !important; }
+                
+                h2 { font-size: 14px; margin: 0; font-weight: bold; }
+                p { margin: 0; }
+                svg { max-width: 100%; height: auto; }
+
+                /* Esconde as instruções na hora de sair no papel */
+                @media print {
+                  .instruction-box { display: none !important; }
+                  body { padding: 0; }
+                }
+              </style>
+            </head>
+            <body>
+              <div class="instruction-box">
+                <h3>🖨️ Página Pronta para Impressão</h3>
+                <p>Para imprimir, abra o menu do seu navegador (três pontinhos) e escolha <strong>"Imprimir"</strong> ou <strong>"Compartilhar > Imprimir"</strong>.</p>
+              </div>
+              
+              <div class="ticket-area">
+                ${container.innerHTML}
+              </div>
+            </body>
+            </html>
+          `);
+          printWindow.document.close();
+        }
+        
+        setPrintingVoters([]);
+      }, 500);
+
+    } else {
+      // É COMPUTADOR (Método silencioso automático)
+      setPrintingVoters(votersToPrint);
+      setTimeout(() => {
+        window.print();
+      }, 800);
     }
-    
-    // Alimenta o estado com os eleitores. O React vai injetar a div invisível.
-    setPrintingVoters(votersToPrint);
-    
-    // Como a div invisível não usa display:none, o React renderiza rápido.
-    // Damos um tempo muito curto apenas para a DOM atualizar, evitando que o celular ache que é um pop-up.
-    setTimeout(() => {
-      window.print();
-    }, 150);
   };
 
   const sortedVoters = [...voters].sort((a, b) => b.createdAt - a.createdAt);
@@ -314,8 +409,7 @@ export default function Admin() {
   return (
     <>
       <style>{`
-        /* TÉCNICA DE ACESSIBILIDADE OFICIAL E COMPROVADA */
-        /* Mantém o elemento na DOM para o React gerar rápido, mas invisível ao usuário */
+        /* Mantém renderizado para gerar o HTML, mas invisível */
         @media screen { 
           .print-container { 
             position: absolute !important;
@@ -330,36 +424,13 @@ export default function Admin() {
           } 
         }
 
-        /* REGRAS DE IMPRESSÃO */
+        /* Regras apenas para a impressão do PC */
         @media print {
-          @page { 
-            margin: 0; 
-            size: 58mm auto; 
-          }
-          html, body {
-            height: auto !important;
-            overflow: visible !important;
-            background: white !important;
-            margin: 0 !important;
-            padding: 0 !important;
-          }
+          @page { margin: 0; size: 58mm auto; }
+          html, body { height: auto !important; overflow: visible !important; background: white !important; margin: 0 !important; padding: 0 !important; }
           .no-print { display: none !important; }
-          .print-container {
-            display: block !important;
-            position: static !important;
-            width: 58mm !important;
-            clip: auto !important;
-            overflow: visible !important;
-            height: auto !important;
-            margin: 0 auto !important;
-            padding: 0 !important;
-          }
-          .ticket {
-            width: 58mm !important;
-            padding: 5mm !important;
-            text-align: center;
-            box-sizing: border-box;
-          }
+          .print-container { position: relative !important; left: 0 !important; top: 0 !important; opacity: 1 !important; display: block !important; width: 58mm !important; margin: 0 auto !important; padding: 0 !important; }
+          .ticket { width: 58mm !important; padding: 5mm !important; text-align: center; box-sizing: border-box; }
         }
       `}</style>
 
@@ -385,6 +456,8 @@ export default function Admin() {
         </header>
 
         <main className="max-w-5xl mx-auto p-4 md:p-6 space-y-6">
+          
+          {/* MÓDULO DE USUÁRIOS PENDENTES */}
           {currentUser.isAdmin && pendingUsers.length > 0 && (
             <Card className="border-gold bg-gold/5">
               <CardHeader>
@@ -395,7 +468,7 @@ export default function Admin() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
-                  {pendingUsers.map(u => (
+                  {pendingUsers.map((u: any) => (
                     <div key={u.username} className="flex items-center justify-between p-3 rounded-lg border bg-card">
                       <span className="font-semibold">{u.username}</span>
                       <div className="flex gap-2">
@@ -406,6 +479,33 @@ export default function Admin() {
                           <XCircle className="w-4 h-4 mr-1" /> Rejeitar
                         </Button>
                       </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* NOVO MÓDULO: GERENCIAR USUÁRIOS APROVADOS */}
+          {currentUser.isAdmin && approvedUsers.length > 0 && (
+            <Card className="border-destructive/30">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <Users className="w-5 h-5 text-destructive" />
+                  Gerenciar Acessos (Usuários Aprovados)
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {approvedUsers.map((u: any) => (
+                    <div key={u.username} className="flex items-center justify-between p-3 rounded-lg border bg-card">
+                      <div className="flex flex-col">
+                        <span className="font-semibold">{u.username}</span>
+                        {u.isAdmin && <Badge variant="secondary" className="w-fit mt-1 text-[10px]">Administrador</Badge>}
+                      </div>
+                      <Button size="sm" variant="outline" className="border-destructive text-destructive hover:bg-destructive/10" onClick={() => handleRemoveUser(u.username)}>
+                        <UserMinus className="w-4 h-4 mr-1" /> Remover
+                      </Button>
                     </div>
                   ))}
                 </div>
@@ -434,15 +534,29 @@ export default function Admin() {
               </CardTitle>
             </CardHeader>
             <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              <div><Label>Título da Eleição</Label><SyncInput value={state.title} onChange={(v: string) => handleSaveElection('title', v)} /></div>
-              <div><Label>Data</Label><SyncInput type="date" value={state.date} onChange={(v: string) => handleSaveElection('date', v)} /></div>
-              <div><Label>Meta de Votantes (Quórum)</Label><SyncInput type="number" min={0} value={state.voterGoal?.toString() || ''} onChange={(v: string) => handleSaveElection('voterGoal', parseInt(v) || 0)} /></div>
-              <div><Label>Vagas Presbíteros</Label><SyncInput type="number" min={0} value={state.presbyterSlots?.toString() || ''} onChange={(v: string) => handleSaveElection('presbyterSlots', parseInt(v) || 0)} /></div>
-              <div><Label>Vagas Diáconos</Label><SyncInput type="number" min={0} value={state.deaconSlots?.toString() || ''} onChange={(v: string) => handleSaveElection('deaconSlots', parseInt(v) || 0)} /></div>
+              <div>
+                <Label>Título da Eleição</Label>
+                <SyncInput value={state.title || ''} onChange={(val: string) => handleSaveElection('title', val)} />
+              </div>
+              <div>
+                <Label>Data</Label>
+                <SyncInput type="date" value={state.date || ''} onChange={(val: string) => handleSaveElection('date', val)} />
+              </div>
+              <div>
+                <Label>Meta de Votantes (Opcional)</Label>
+                <SyncInput type="number" min={0} value={state.voterGoal?.toString() || ''} onChange={(val: string) => handleSaveElection('voterGoal', parseInt(val) || 0)} />
+              </div>
+              <div>
+                <Label>Vagas Presbíteros</Label>
+                <SyncInput type="number" min={0} value={state.presbyterSlots?.toString() || ''} onChange={(val: string) => handleSaveElection('presbyterSlots', parseInt(val) || 0)} />
+              </div>
+              <div>
+                <Label>Vagas Diáconos</Label>
+                <SyncInput type="number" min={0} value={state.deaconSlots?.toString() || ''} onChange={(val: string) => handleSaveElection('deaconSlots', parseInt(val) || 0)} />
+              </div>
             </CardContent>
           </Card>
 
-          {/* MÓDULO GERENCIAR ELEITORES (CÓDIGOS E QRCODES) */}
           <Card className="border-blue-900 border-2">
             <CardHeader className="bg-blue-900/5 pb-4">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -647,8 +761,6 @@ export default function Admin() {
                       );
                     })()}
                   </div>
-                  
-                  {/* OPÇÕES DE MODO DE URNA ADICIONADAS */}
                   <div className="space-y-4 bg-background p-4 rounded-lg border">
                     <h4 className="font-bold text-md flex items-center gap-2">
                       <ShieldCheck className="w-5 h-5 text-gold" />
@@ -696,7 +808,6 @@ export default function Admin() {
                       </div>
                     </div>
                   </div>
-
                   <div className="grid gap-2 sm:grid-cols-2">
                     {state.candidates.filter(c => !((startingScrutinyType === 'presbitero' ? state.electedPresbyters : state.electedDeacons).includes(c.id))).map(c => {
                         const isSelected = selectedParticipants.includes(c.id);
@@ -840,7 +951,7 @@ export default function Admin() {
         </div>
       )}
 
-      {/* MÓDULO DE IMPRESSÃO ONDE INSERIMOS A URL DIRETA E NÍVEL DE CORREÇÃO 'M' */}
+      {/* MÓDULO DE IMPRESSÃO (OCULTO NA TELA E RENDERIZADO NO PAPEL/ABA NOVA) */}
       {printingVoters.length > 0 && (
         <div className="print-container font-sans text-black bg-white">
           {printingVoters.map((v, index) => (
@@ -861,7 +972,7 @@ export default function Admin() {
               </div>
               
               <div style={{display:'flex', justifyContent:'center', margin:'10px 0'}}>
-                {/* Aqui está o pulo do gato: A URL mágica com level M para evitar colapso de SVG no celular */}
+                {/* NÍVEL "M" para evitar código muito denso e estourar impressão mobile */}
                 <QRCodeSVG value={`https://vota.ipbnb.com.br/urna?codigo=${v.code}`} size={140} level="M" />
               </div>
               
