@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 // Mantemos o Canvas para blindar a memória do celular
-import { QRCodeSVG, QRCodeCanvas } from 'qrcode.react';
+import { QRCodeCanvas } from 'qrcode.react';
 import {
   ArrowLeft, Plus, Trash2, Play, Square, AlertTriangle, Users, Award, RotateCcw, UserPlus, LogOut, CheckCircle2, XCircle, ShieldCheck, Eye, QrCode, Printer, Smartphone, Tablet, Search, UserMinus, Settings, Tag
 } from 'lucide-react';
@@ -315,7 +315,7 @@ export default function Admin() {
     }
   };
 
-  // Nova função para salvar a TAG do eleitor
+  // Função para salvar a TAG do eleitor
   const handleSaveTag = () => {
     if (!taggingVoterCode) return;
     
@@ -334,17 +334,14 @@ export default function Admin() {
     setNewTagValue(voter.tag || '');
   };
 
-  // =======================================================================
-  // A IMPRESSÃO RAIZ (Teste de Mobile sem abrir telas extras)
-  // =======================================================================
+  // A IMPRESSÃO RAIZ (Na mesma página, tanto PC quanto Mobile)
   const handlePrint = (votersToPrint: Voter[]) => {
     if (votersToPrint.length === 0) return;
 
-    // Jogamos os tickets na memória. O CSS da div invisível cuidará do resto.
+    // Jogamos os tickets na memória. O CSS cuidará do resto.
     setPrintingVoters(votersToPrint);
 
     // Damos 800ms pro React desenhar o Canvas.
-    // Como voltamos pra técnica original, o celular tentará imprimir na mesma página!
     setTimeout(() => {
       window.print();
     }, 800);
@@ -360,7 +357,7 @@ export default function Admin() {
   return (
     <>
       <style>{`
-        /* A Div Invisível que funciona no PC (e vamos testar no mobile agora) */
+        /* A Div Invisível que funciona no PC e no mobile */
         @media screen { 
           .print-container { 
             position: absolute !important;
@@ -441,7 +438,7 @@ export default function Admin() {
                <Button 
                  variant="outline" 
                  onClick={() => setShowManageUsersModal(true)}
-                 className="border-slate-300 text-slate-700 hover:bg-slate-100"
+                 className="border-slate-300 text-slate-700 hover:bg-slate-100 shadow-sm"
                >
                  <Settings className="w-4 h-4 mr-2" />
                  Gerenciar Acessos do Sistema
@@ -528,7 +525,6 @@ export default function Admin() {
                 <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
                   <div className="relative w-full max-w-sm">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    {/* A Busca agora não bloqueia letras, permitindo buscar pelas TAGS */}
                     <Input 
                       placeholder="Pesquisar código ou nome..." 
                       value={searchVoter}
@@ -550,7 +546,7 @@ export default function Admin() {
               )}
 
               {filteredVoters.length > 0 ? (
-                // O GRID: Ajustado para acomodar o layout empilhado de cada cartão no mobile
+                // O GRID EMPILHADO PERFEITO PARA MOBILE
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 max-h-[400px] overflow-y-auto p-2 border rounded-lg bg-card">
                   {filteredVoters.map(v => {
                     const hasVotedCurrentRound = isVotingOpen && currentScrutiny?.authMode === 'code' && votedCodesList.includes(v.code);
@@ -558,7 +554,6 @@ export default function Admin() {
                     return (
                       <div 
                         key={v.code} 
-                        // O NOVO CARTÃO DO ELEITOR: Layout vertical (flex-col) para economizar espaço e não espremer os botões
                         className={`flex flex-col p-2 border rounded-md transition-colors shadow-sm ${hasVotedCurrentRound ? 'bg-success/10 border-success/30' : 'bg-muted/30'}`}
                       >
                         {/* Linha 1: Código e Status */}
@@ -586,7 +581,7 @@ export default function Admin() {
                           )}
                         </div>
 
-                        {/* Linha 3: Os Botões de Ação (Alinhados perfeitamente) */}
+                        {/* Linha 3: Os Botões (Alinhados no rodapé) */}
                         <div className="flex items-center justify-between border-t border-border/50 pt-2 mt-auto">
                           <Button 
                             variant="ghost" 
@@ -620,7 +615,6 @@ export default function Admin() {
             </CardContent>
           </Card>
 
-          {/* O resto da tela continua normal... */}
           <Card>
             <CardHeader>
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
