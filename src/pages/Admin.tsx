@@ -9,8 +9,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
-// A CHAVE DO SUCESSO: Importamos o QRCodeCanvas para o mobile não travar na impressão
-import { QRCodeSVG, QRCodeCanvas } from 'qrcode.react';
+// Importamos SOMENTE o Canvas para blindar a memória do mobile
+import { QRCodeCanvas } from 'qrcode.react';
 import {
   ArrowLeft, Plus, Trash2, Play, Square, AlertTriangle, Users, Award, RotateCcw, UserPlus, LogOut, CheckCircle2, XCircle, ShieldCheck, Eye, QrCode, Printer, Smartphone, Tablet, Search
 } from 'lucide-react';
@@ -59,7 +59,7 @@ export default function Admin() {
 
   const [voterCountToGenerate, setVoterCountToGenerate] = useState<number | string>(1);
   
-  // A lista de impressão não será limpa automaticamente para evitar bugs no mobile
+  // A lista de impressão
   const [printingVoters, setPrintingVoters] = useState<Voter[]>([]);
   const [searchVoter, setSearchVoter] = useState('');
   
@@ -300,14 +300,17 @@ export default function Admin() {
     }
   };
 
+  // =======================================================================
+  // A ARQUITETURA ORIGINAL DE IMPRESSÃO (Simples, Síncrona, Mesma Página)
+  // =======================================================================
   const handlePrint = (votersToPrint: Voter[]) => {
     if (votersToPrint.length === 0) return;
     
-    // Jogamos os dados na memória pro React desenhar
+    // Alimenta o estado para o React renderizar
     setPrintingVoters(votersToPrint);
     
-    // Usamos os exatos 800ms da sua versão funcional. 
-    // Como agora usamos Canvas, o celular não vai estourar a memória.
+    // O tempo seguro que você atestou funcionar. 
+    // Como agora é Canvas, não haverá estouro de memória no celular.
     setTimeout(() => {
       window.print();
     }, 800);
@@ -319,23 +322,23 @@ export default function Admin() {
   return (
     <>
       <style>{`
-        /* CSS que funcionou 100% no seu teste original */
+        /* CSS que você testou e validou na primeira versão */
         @media screen { 
           .print-container { 
-            position: fixed;
-            left: -9999px;
-            top: -9999px;
-            opacity: 0;
-            pointer-events: none;
-            z-index: -1;
+            position: absolute !important;
+            width: 1px !important;
+            height: 1px !important;
+            padding: 0 !important;
+            margin: -1px !important;
+            overflow: hidden !important;
+            clip: rect(0, 0, 0, 0) !important;
+            white-space: nowrap !important;
+            border: 0 !important;
           } 
         }
 
         @media print {
-          @page { 
-            margin: 0; 
-            size: 58mm auto; 
-          }
+          @page { margin: 0; size: 58mm auto; }
           html, body {
             height: auto !important;
             overflow: visible !important;
@@ -345,12 +348,12 @@ export default function Admin() {
           }
           .no-print { display: none !important; }
           .print-container {
-            position: relative !important;
-            left: 0 !important;
-            top: 0 !important;
-            opacity: 1 !important;
             display: block !important;
+            position: static !important;
             width: 58mm !important;
+            clip: auto !important;
+            overflow: visible !important;
+            height: auto !important;
             margin: 0 auto !important;
             padding: 0 !important;
           }
@@ -851,7 +854,7 @@ export default function Admin() {
         </div>
       )}
 
-      {/* O SEGREDO ESTÁ AQUI: O QRCodeCanvas no lugar do QRCodeSVG */}
+      {/* MÓDULO DE IMPRESSÃO (USANDO CANVAS) */}
       {printingVoters.length > 0 && (
         <div className="print-container font-sans text-black bg-white">
           {printingVoters.map((v, index) => (
@@ -872,7 +875,7 @@ export default function Admin() {
               </div>
               
               <div style={{display:'flex', justifyContent:'center', margin:'10px 0'}}>
-                {/* Aqui está o herói. Ele vai ser renderizado como uma imagem plana leve */}
+                {/* A CURA PARA A MEMÓRIA DO CELULAR */}
                 <QRCodeCanvas value={`https://vota.ipbnb.com.br/urna?codigo=${v.code}`} size={140} level="M" />
               </div>
               
