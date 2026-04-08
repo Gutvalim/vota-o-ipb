@@ -9,7 +9,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
-import { QRCodeSVG } from 'qrcode.react';
+// A CHAVE DO SUCESSO: Importamos o QRCodeCanvas para o mobile não travar na impressão
+import { QRCodeSVG, QRCodeCanvas } from 'qrcode.react';
 import {
   ArrowLeft, Plus, Trash2, Play, Square, AlertTriangle, Users, Award, RotateCcw, UserPlus, LogOut, CheckCircle2, XCircle, ShieldCheck, Eye, QrCode, Printer, Smartphone, Tablet, Search
 } from 'lucide-react';
@@ -57,6 +58,8 @@ export default function Admin() {
   const [selectedParticipants, setSelectedParticipants] = useState<string[]>([]);
 
   const [voterCountToGenerate, setVoterCountToGenerate] = useState<number | string>(1);
+  
+  // A lista de impressão não será limpa automaticamente para evitar bugs no mobile
   const [printingVoters, setPrintingVoters] = useState<Voter[]>([]);
   const [searchVoter, setSearchVoter] = useState('');
   
@@ -66,7 +69,6 @@ export default function Admin() {
   const [customPin, setCustomPin] = useState('4321');
 
   useEffect(() => {
-    // Limpa a memória no PC após a impressão
     const handleAfterPrint = () => {
       setPrintingVoters([]);
     };
@@ -298,79 +300,17 @@ export default function Admin() {
     }
   };
 
-  // =======================================================================
-  // A ABORDAGEM DEFINITIVA DO IFRAME OCULTO (Padrão da Indústria Web)
-  // =======================================================================
   const handlePrint = (votersToPrint: Voter[]) => {
     if (votersToPrint.length === 0) return;
-
-    const isMobile = window.innerWidth <= 768 || /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+    
+    // Jogamos os dados na memória pro React desenhar
     setPrintingVoters(votersToPrint);
-
-    if (isMobile) {
-      // Cria ou recupera um Iframe fantasma no documento
-      let iframe = document.getElementById('print-iframe') as HTMLIFrameElement;
-      
-      if (!iframe) {
-        iframe = document.createElement('iframe');
-        iframe.id = 'print-iframe';
-        // Essencial para o iOS não ignorar: O iframe deve ser renderizado, mas ficar fora da visão
-        iframe.style.position = 'absolute';
-        iframe.style.top = '-9999px';
-        iframe.style.width = '1px';
-        iframe.style.height = '1px';
-        iframe.style.border = 'none';
-        document.body.appendChild(iframe);
-      }
-
-      // Aguarda 300ms para o React desenhar o SVG na div .print-container
-      setTimeout(() => {
-        const container = document.querySelector('.print-container');
-        
-        if (container && iframe.contentWindow) {
-          const doc = iframe.contentWindow.document;
-          doc.open();
-          // Injetamos um HTML limpo no Iframe, sem o Tailwind do sistema.
-          doc.write(`
-            <!DOCTYPE html>
-            <html>
-            <head>
-              <meta charset="utf-8">
-              <title>Imprimir Tickets</title>
-              <style>
-                @page { margin: 0; size: 58mm auto; }
-                body { margin: 0; padding: 0; background: white; color: black; font-family: sans-serif; }
-                .ticket { width: 58mm; padding: 5mm; text-align: center; box-sizing: border-box; page-break-after: always; margin: 0 auto; }
-                .ticket:last-child { page-break-after: auto; }
-                h2 { font-size: 14px; margin: 0; font-weight: bold; }
-                p { margin: 0; }
-                svg { max-width: 100%; height: auto; }
-              </style>
-            </head>
-            <body>
-              ${container.innerHTML}
-            </body>
-            </html>
-          `);
-          doc.close();
-
-          // Um pequeno tempo extra (150ms) para o Iframe digerir o CSS, e então dispara a impressão DELE.
-          setTimeout(() => {
-            iframe.contentWindow?.focus();
-            iframe.contentWindow?.print();
-            
-            // Limpa a memória de forma silenciosa
-            setTimeout(() => setPrintingVoters([]), 1000);
-          }, 150);
-        }
-      }, 300);
-
-    } else {
-      // PC: A técnica nativa invisível que já funciona perfeitamente
-      setTimeout(() => {
-        window.print();
-      }, 400);
-    }
+    
+    // Usamos os exatos 800ms da sua versão funcional. 
+    // Como agora usamos Canvas, o celular não vai estourar a memória.
+    setTimeout(() => {
+      window.print();
+    }, 800);
   };
 
   const sortedVoters = [...voters].sort((a, b) => b.createdAt - a.createdAt);
@@ -379,7 +319,7 @@ export default function Admin() {
   return (
     <>
       <style>{`
-        /* A Div Invisível oficial que serve de "molde" para o PC e para o Iframe no Mobile */
+        /* CSS que funcionou 100% no seu teste original */
         @media screen { 
           .print-container { 
             position: fixed;
@@ -391,13 +331,35 @@ export default function Admin() {
           } 
         }
 
-        /* Regras apenas para a versão Desktop */
         @media print {
-          @page { margin: 0; size: 58mm auto; }
-          html, body { height: auto !important; overflow: visible !important; background: white !important; margin: 0 !important; padding: 0 !important; }
+          @page { 
+            margin: 0; 
+            size: 58mm auto; 
+          }
+          html, body {
+            height: auto !important;
+            overflow: visible !important;
+            background: white !important;
+            margin: 0 !important;
+            padding: 0 !important;
+          }
           .no-print { display: none !important; }
-          .print-container { position: relative !important; left: 0 !important; top: 0 !important; opacity: 1 !important; display: block !important; width: 58mm !important; margin: 0 auto !important; padding: 0 !important; }
-          .ticket { width: 58mm !important; padding: 5mm !important; text-align: center; box-sizing: border-box; }
+          .print-container {
+            position: relative !important;
+            left: 0 !important;
+            top: 0 !important;
+            opacity: 1 !important;
+            display: block !important;
+            width: 58mm !important;
+            margin: 0 auto !important;
+            padding: 0 !important;
+          }
+          .ticket {
+            width: 58mm !important;
+            padding: 5mm !important;
+            text-align: center;
+            box-sizing: border-box;
+          }
         }
       `}</style>
 
@@ -889,7 +851,7 @@ export default function Admin() {
         </div>
       )}
 
-      {/* A DIV INVISÍVEL OFICIAL PARA PC E PARA O IFRAME */}
+      {/* O SEGREDO ESTÁ AQUI: O QRCodeCanvas no lugar do QRCodeSVG */}
       {printingVoters.length > 0 && (
         <div className="print-container font-sans text-black bg-white">
           {printingVoters.map((v, index) => (
@@ -910,7 +872,8 @@ export default function Admin() {
               </div>
               
               <div style={{display:'flex', justifyContent:'center', margin:'10px 0'}}>
-                <QRCodeSVG value={`https://vota.ipbnb.com.br/urna?codigo=${v.code}`} size={140} level="M" />
+                {/* Aqui está o herói. Ele vai ser renderizado como uma imagem plana leve */}
+                <QRCodeCanvas value={`https://vota.ipbnb.com.br/urna?codigo=${v.code}`} size={140} level="M" />
               </div>
               
               <p style={{fontSize:'10px', lineHeight:'1.2', marginTop: '10px'}}>
