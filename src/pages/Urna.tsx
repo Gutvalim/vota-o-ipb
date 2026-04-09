@@ -53,15 +53,11 @@ export default function Urna() {
   const [showPinPad, setShowPinPad] = useState(false);
   const [pinInput, setPinInput] = useState('');
 
-  // Estados de Autenticação do Eleitor
   const [authenticatedCode, setAuthenticatedCode] = useState<string | null>(null);
   const [authInput, setAuthInput] = useState('');
   const [isScanning, setIsScanning] = useState(false);
   
-  // Estado ponte para receber o código da câmera e validar com segurança
   const [cameraResult, setCameraResult] = useState<string | null>(null);
-  
-  // Impede que o sistema tente ler a URL mais de uma vez e trave com mensagens duplicadas
   const [urlCodeProcessed, setUrlCodeProcessed] = useState(false);
 
   const currentScrutiny = state.scrutinies.find(s => s.id === state.currentScrutinyId);
@@ -71,7 +67,6 @@ export default function Urna() {
   const authMode = currentScrutiny?.authMode || 'pin';
   const requiredPin = currentScrutiny?.pin || '4321';
 
-  // Limpeza Síncrona Forçada (Amnésia Absoluta entre turnos)
   const currentScrutinyKey = `${state.currentScrutinyId}-${currentScrutiny?.startedAt}-${isOpen}`;
   const [syncKey, setSyncKey] = useState(currentScrutinyKey);
 
@@ -87,10 +82,9 @@ export default function Urna() {
     setAuthenticatedCode(null);
     setAuthInput('');
     setIsScanning(false);
-    setUrlCodeProcessed(false); // Se a pessoa ficou na tela até o próximo turno, permite ler a URL de novo
+    setUrlCodeProcessed(false); 
   }
 
-  // 1. Leitura Automática da URL (Acesso direto pelo papel)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const urlCode = params.get('codigo');
@@ -103,15 +97,13 @@ export default function Urna() {
     }
   }, [isOpen, authMode, authenticatedCode, hasVoted, urlCodeProcessed, state.voters]);
 
-  // 2. Validador do resultado da Câmera (Roda logo após a câmera ser fechada)
   useEffect(() => {
     if (cameraResult) {
       handleValidateVoterCode(cameraResult);
-      setCameraResult(null); // limpa o estado após validar
+      setCameraResult(null); 
     }
   }, [cameraResult]);
 
-  // 3. Sistema de Câmera Interna (Blindado contra URLs longas)
   useEffect(() => {
     let html5QrCode: Html5Qrcode | null = null;
     let isMounted = true;
@@ -129,19 +121,15 @@ export default function Urna() {
           if (!isMounted) return;
           
           let finalCode = decodedText;
-          
           if (decodedText.includes('codigo=')) {
             finalCode = decodedText.split('codigo=')[1];
           }
-          
           finalCode = finalCode.replace(/\D/g, '');
 
           setCameraResult(finalCode);
           setIsScanning(false);
         },
-        (errorMessage) => {
-          // Ignora mensagens de erro contínuas de frame vazio
-        }
+        (errorMessage) => {}
       ).catch((err) => {
         if (isMounted) {
           console.error(err);
@@ -207,6 +195,15 @@ export default function Urna() {
     });
   };
 
+  const handleAdvanceToConfirm = () => {
+    setShowConfirm(true);
+  };
+
+  const handleBlankVoteClick = () => {
+    setSelectedIds([]); 
+    setShowConfirm(true); 
+  };
+
   const handleConfirm = async () => {
     if (!currentScrutiny) return;
     
@@ -245,8 +242,6 @@ export default function Urna() {
     setAuthInput('');
     setUrlCodeProcessed(false);
 
-    // FIX MÁGICO DO VOTO NEGADO: Limpa a URL do navegador sem recarregar a página
-    // Isso evita que a pessoa aperte F5 ou que o próximo irmão trave com o código do anterior
     const url = new URL(window.location.href);
     if (url.searchParams.has('codigo')) {
       url.searchParams.delete('codigo');
@@ -270,7 +265,6 @@ export default function Urna() {
     }
   };
 
-  // TELA DE ESPERA / FECHADA
   if (!isOpen || votingClosed) {
     return (
       <div className="h-[100dvh] flex flex-col items-center justify-center bg-primary p-8 overflow-hidden relative">
@@ -288,7 +282,6 @@ export default function Urna() {
     );
   }
 
-  // TELA DE AUTENTICAÇÃO DO ELEITOR (Modo Código/Celular)
   if (authMode === 'code' && !authenticatedCode && !hasVoted) {
     return (
       <div className="h-[100dvh] flex flex-col bg-primary overflow-x-hidden overflow-y-auto relative">
@@ -301,7 +294,6 @@ export default function Urna() {
 
         <main className="flex-1 flex flex-col items-center justify-center p-4">
           <div className="w-full max-w-md bg-primary-foreground/5 p-6 md:p-8 rounded-3xl border border-primary-foreground/10 shadow-2xl flex flex-col items-center text-center">
-            
             <KeyRound className="w-12 h-12 md:w-16 md:h-16 text-gold mb-4" />
             <h2 className="text-2xl md:text-3xl font-display font-bold text-primary-foreground mb-2">Identificação</h2>
             <p className="text-primary-foreground/70 text-base md:text-lg mb-6">
@@ -317,12 +309,10 @@ export default function Urna() {
               </div>
             ) : (
               <div className="w-full">
-                {/* Visor do Código */}
                 <div className="w-full bg-background/50 border-2 border-primary-foreground/20 text-primary-foreground text-center text-4xl tracking-widest font-mono py-4 rounded-xl min-h-[72px] flex items-center justify-center mb-4">
                   {authInput ? authInput : <span className="text-primary-foreground/30">000000</span>}
                 </div>
 
-                {/* Teclado Numérico */}
                 <div className="grid grid-cols-3 gap-2 w-full max-w-[280px] mx-auto mb-4">
                   {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(num => (
                     <button
@@ -383,7 +373,6 @@ export default function Urna() {
     );
   }
 
-  // TELA DE ERRO
   if (voteError) {
     return (
       <div className="h-[100dvh] flex flex-col items-center justify-center bg-primary p-4 overflow-hidden">
@@ -417,11 +406,9 @@ export default function Urna() {
     );
   }
 
-  // TELA DE SUCESSO
   if (hasVoted) {
     return (
       <div className="h-[100dvh] flex flex-col items-center justify-center bg-primary p-4 overflow-hidden">
-        
         {authMode === 'code' ? (
            <div className="text-center w-full max-w-md md:max-w-2xl px-4 flex flex-col items-center">
             <CheckCircle2 className="w-24 h-24 md:w-32 md:h-32 text-success mb-6 shrink-0" />
@@ -508,7 +495,6 @@ export default function Urna() {
     );
   }
 
-  // TELA DE CARREGAMENTO
   if (isSubmitting) {
     return (
       <div className="h-[100dvh] flex flex-col items-center justify-center bg-primary p-4 overflow-hidden">
@@ -528,11 +514,10 @@ export default function Urna() {
     );
   }
 
-  // RENDERIZAÇÃO DA TELA (Muda entre Seleção e Confirmação)
   return (
     <div className="h-[100dvh] bg-primary flex flex-col overflow-hidden relative">
       
-      {/* CABEÇALHO GLOBAL (Sempre visível) */}
+      {/* CABEÇALHO GLOBAL */}
       <header className="shrink-0 p-3 md:p-4 border-b border-primary-foreground/10 z-10 bg-primary">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex flex-col md:flex-row md:items-center gap-3 md:gap-4">
@@ -572,8 +557,9 @@ export default function Urna() {
         // MODO 1: TELA DE SELEÇÃO DE CANDIDATOS
         // ==========================================
         <>
-          <main className="flex-1 p-2 md:p-4 overflow-y-auto">
-            <div className="w-full max-w-7xl mx-auto flex flex-wrap justify-center gap-3 md:gap-5 pt-4 pb-8">
+          {/* FLEX-COL e MY-AUTO garantem a centralização global automática */}
+          <main className="flex-1 flex flex-col p-2 md:p-4 overflow-y-auto">
+            <div className="my-auto w-full max-w-7xl mx-auto flex flex-wrap justify-center gap-3 md:gap-5 pt-4 pb-8">
               {participatingCandidates.map(c => {
                 const isSelected = selectedIds.includes(c.id);
                 
@@ -609,9 +595,12 @@ export default function Urna() {
                         </div>
                       )}
                     </div>
-                    <p className={`font-bold text-xl md:text-2xl leading-tight line-clamp-2 ${textStyle}`}>
-                      {c.name}
-                    </p>
+                    {/* CONTAINER FIXO DE 2 LINHAS PARA O NOME */}
+                    <div className="h-[3rem] md:h-[3.75rem] flex items-center justify-center w-full px-1">
+                      <p className={`font-bold text-lg md:text-xl lg:text-2xl leading-tight line-clamp-2 ${textStyle}`}>
+                        {c.name}
+                      </p>
+                    </div>
                     {isSelected && (
                       <div className={`absolute top-2 right-2 md:top-3 md:right-3 w-8 h-8 md:w-10 md:h-10 rounded-full flex items-center justify-center shadow-lg ${checkBgStyle}`}>
                         <CheckCircle2 className="w-5 h-5 md:w-7 md:h-7" />
@@ -656,42 +645,43 @@ export default function Urna() {
         </>
       ) : (
         // ==========================================
-        // MODO 2: TELA DE CONFIRMAÇÃO DO VOTO
+        // MODO 2: TELA DE CONFIRMAÇÃO DO VOTO (Com Grid para o Tablet)
         // ==========================================
         <>
           <main className="flex-1 p-4 md:p-6 overflow-y-auto">
-            <div className="w-full max-w-3xl mx-auto flex flex-col items-center pt-4 pb-8">
+            <div className="w-full max-w-5xl mx-auto flex flex-col items-center pt-4 pb-8">
               <h2 className="text-2xl md:text-4xl font-display font-bold text-primary-foreground mb-8 text-center">
                 Confira o seu voto:
               </h2>
               
-              <div className="w-full flex flex-col gap-4">
+              {/* GRID DE 2 COLUNAS: Garante que não precise rolar no Tablet deitado */}
+              <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4 px-2">
                 {/* Mostra os Candidatos Escolhidos */}
                 {state.candidates.filter(c => selectedIds.includes(c.id)).map(c => (
-                  <div key={c.id} className="flex items-center gap-4 bg-primary-foreground/10 p-3 md:p-4 rounded-2xl shadow-md border-2 border-gold">
-                    <div className="w-16 h-16 md:w-20 md:h-20 rounded-full overflow-hidden shrink-0 bg-primary">
+                  <div key={c.id} className="flex items-center gap-3 md:gap-4 bg-primary-foreground/10 p-2 md:p-4 rounded-xl md:rounded-2xl shadow-md border-2 border-gold">
+                    <div className="w-12 h-12 md:w-16 md:h-16 rounded-full overflow-hidden shrink-0 bg-primary">
                       {c.photo ? (
                         <img src={c.photo} alt={c.name} className="w-full h-full object-cover" />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center">
-                          <Users className="w-8 h-8 text-primary-foreground/30" />
+                          <Users className="w-6 h-6 md:w-8 h-8 text-primary-foreground/30" />
                         </div>
                       )}
                     </div>
                     <div>
-                      <p className="font-bold text-xl md:text-3xl text-primary-foreground">{c.name}</p>
+                      <p className="font-bold text-lg md:text-2xl text-primary-foreground leading-tight">{c.name}</p>
                     </div>
                   </div>
                 ))}
 
                 {/* Mostra Explicitamente os Votos em Branco */}
                 {blankCount > 0 && Array.from({ length: blankCount }).map((_, i) => (
-                  <div key={`blank-${i}`} className="flex items-center gap-4 bg-primary-foreground/5 p-3 md:p-4 rounded-2xl shadow-inner border-2 border-dashed border-primary-foreground/30">
-                    <div className="w-16 h-16 md:w-20 md:h-20 rounded-full shrink-0 bg-primary-foreground/20 flex items-center justify-center">
-                      <div className="w-6 h-6 md:w-8 md:h-8 bg-primary rounded-full"></div>
+                  <div key={`blank-${i}`} className="flex items-center gap-3 md:gap-4 bg-primary-foreground/5 p-2 md:p-4 rounded-xl md:rounded-2xl shadow-inner border-2 border-dashed border-primary-foreground/30">
+                    <div className="w-12 h-12 md:w-16 md:h-16 rounded-full shrink-0 bg-primary-foreground/20 flex items-center justify-center">
+                      <div className="w-4 h-4 md:w-6 md:h-6 bg-primary rounded-full"></div>
                     </div>
                     <div>
-                      <p className="font-bold text-xl md:text-3xl text-primary-foreground/70 uppercase">Voto em Branco</p>
+                      <p className="font-bold text-lg md:text-2xl text-primary-foreground/70 uppercase">Voto em Branco</p>
                     </div>
                   </div>
                 ))}
