@@ -57,7 +57,7 @@ export default function Admin() {
   const [selectedParticipants, setSelectedParticipants] = useState<string[]>([]);
 
   const [voterCountToGenerate, setVoterCountToGenerate] = useState<number | string>(1);
-  const [tagToGenerate, setTagToGenerate] = useState(''); // NOVO: Estado para a tag na hora de gerar
+  const [tagToGenerate, setTagToGenerate] = useState('');
   const [printingVoters, setPrintingVoters] = useState<Voter[]>([]);
   const [searchVoter, setSearchVoter] = useState('');
   
@@ -278,7 +278,6 @@ export default function Admin() {
     return { remainingSlots, nextRound, alreadyElected };
   };
 
-  // FUNÇÃO ATUALIZADA: Gerar com TAG já inclusa
   const handleGenerateVoters = () => {
     const count = parseInt(voterCountToGenerate.toString());
     if (isNaN(count) || count <= 0 || count > 500) {
@@ -294,7 +293,6 @@ export default function Admin() {
         isDuplicate = voters.some(v => v.code === code) || newVoters.some(v => v.code === code);
       } while (isDuplicate);
       
-      // Inteligência para enumerar a Tag se a pessoa gerar mais de 1 código com o mesmo nome
       let finalTag = tagToGenerate.trim();
       if (count > 1 && finalTag) {
         finalTag = `${finalTag} ${i + 1}`; 
@@ -305,7 +303,6 @@ export default function Admin() {
     dispatch({ type: 'ADD_VOTERS', payload: newVoters });
     toast.success(`${count} códigos gerados com sucesso!`);
     
-    // Limpa os campos após gerar
     setVoterCountToGenerate(1);
     setTagToGenerate('');
   };
@@ -417,7 +414,6 @@ export default function Admin() {
                 ${container.innerHTML}
               </div>
               <script>
-                // Tenta chamar a impressão do celular automaticamente
                 setTimeout(function() {
                   window.print();
                 }, 500);
@@ -470,7 +466,6 @@ export default function Admin() {
         }
       `}</style>
 
-      {/* POP-UP GIGANTE DE ALERTA OBRIGATÓRIO (MODAL) */}
       {importantAlerts.length > 0 && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-[200] no-print">
           <Card className="w-full max-w-md shadow-2xl border-gold border-2 overflow-hidden bg-white">
@@ -595,7 +590,6 @@ export default function Admin() {
             </CardHeader>
             <CardContent className="pt-6 space-y-6">
               
-              {/* ÁREA DE GERAÇÃO COM O NOVO CAMPO DE NOME/TAG */}
               <div className="flex flex-col md:flex-row items-start md:items-end gap-3 bg-muted/50 p-4 rounded-xl border border-border/50">
                 <div className="flex flex-wrap sm:flex-nowrap items-end gap-2 w-full">
                   <div className="w-20 shrink-0">
@@ -623,7 +617,6 @@ export default function Admin() {
                   </Button>
                 </div>
                 
-                {/* Divisor invisível no mobile para separar as ações */}
                 <div className="w-full h-px bg-border/50 md:hidden my-1"></div>
                 
                 <div className="flex gap-2 w-full md:w-auto shrink-0">
@@ -670,16 +663,17 @@ export default function Admin() {
                         key={v.code} 
                         className={`flex flex-col p-2 border rounded-md transition-colors shadow-sm ${hasVotedCurrentRound ? 'bg-success/10 border-success/30' : 'bg-muted/30'}`}
                       >
-                        <div className="flex items-start justify-between mb-1">
+                        {/* FIX: Layout em coluna (Código -> Badge -> Tag) */}
+                        <div className="flex flex-col items-start mb-2">
                           <span className={`font-mono font-bold text-base md:text-lg tracking-wider ${hasVotedCurrentRound ? 'text-success-foreground' : 'text-slate-800'}`}>
                             {v.code}
                           </span>
                           {isVotingOpen && currentScrutiny?.authMode === 'code' && (
-                            <div>
+                            <div className="mt-1">
                               {hasVotedCurrentRound ? (
-                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-success/20 text-success uppercase tracking-wider">✓ Votou</span>
+                                <span className="text-[9px] font-bold px-2 py-0.5 rounded bg-success/20 text-success uppercase tracking-wider">✓ VOTOU</span>
                               ) : (
-                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-700 uppercase tracking-wider">Pendente</span>
+                                <span className="text-[9px] font-bold px-2 py-0.5 rounded bg-yellow-500/20 text-yellow-700 uppercase tracking-wider">PENDENTE</span>
                               )}
                             </div>
                           )}
@@ -771,23 +765,21 @@ export default function Admin() {
               {state.candidates.length === 0 ? (
                 <p className="text-muted-foreground text-center py-8">Nenhum candidato cadastrado</p>
               ) : (
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                   {state.candidates.map(c => (
-                    <div key={c.id} className="flex items-center gap-3 p-3 rounded-lg border bg-card">
-                      <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center overflow-hidden shrink-0">
+                    <div key={c.id} className="flex items-center gap-2 sm:gap-3 p-2 sm:p-3 rounded-lg border bg-card w-full overflow-hidden">
+                      <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-muted flex items-center justify-center overflow-hidden shrink-0">
                         {c.photo ? <img src={c.photo} alt={c.name} className="w-full h-full object-cover" /> : <Users className="w-5 h-5 text-muted-foreground" />}
                       </div>
                       
-                      {/* FIX DA IMAGEM: Adicionado w-full, flex flex-col items-start e truncate max-w-full */}
-                      <div className="flex-1 min-w-0 flex flex-col items-start">
+                      <div className="flex-1 min-w-0 flex flex-col items-start justify-center">
                         <p className="font-semibold text-sm w-full truncate" title={c.name}>{c.name}</p>
-                        <Badge variant="secondary" className="text-[10px] mt-1 max-w-full truncate inline-block" title={ROLE_LABELS[c.currentRole]}>
+                        <Badge variant="secondary" className="text-[9px] sm:text-[10px] mt-0.5 whitespace-normal text-left leading-tight" title={ROLE_LABELS[c.currentRole]}>
                           {ROLE_LABELS[c.currentRole]}
                         </Badge>
                       </div>
                       
-                      {/* BOTÕES DE AÇÃO DOS CANDIDATOS */}
-                      <div className="flex items-center gap-0.5 sm:gap-1 shrink-0">
+                      <div className="flex items-center shrink-0 -mr-1 sm:mr-0">
                         <Button 
                           variant="ghost" 
                           size="icon" 
