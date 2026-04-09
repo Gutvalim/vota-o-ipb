@@ -130,16 +130,12 @@ export default function Urna() {
           
           let finalCode = decodedText;
           
-          // Se ler a URL nova gigante, "recorta" só o código do final
           if (decodedText.includes('codigo=')) {
             finalCode = decodedText.split('codigo=')[1];
           }
           
-          // Garante de forma absoluta que só sobram os 6 números (remove barras, espaços, etc)
           finalCode = finalCode.replace(/\D/g, '');
 
-          // Em vez de desligar a câmera aqui dentro (o que causa crash no React),
-          // avisamos o estado. O cleanup do useEffect cuida de desligar fisicamente a lente.
           setCameraResult(finalCode);
           setIsScanning(false);
         },
@@ -211,6 +207,15 @@ export default function Urna() {
     });
   };
 
+  const handleAdvanceToConfirm = () => {
+    setShowConfirm(true);
+  };
+
+  const handleBlankVoteClick = () => {
+    setSelectedIds([]); // Garante que a seleção fica vazia
+    setShowConfirm(true); // Vai para a tela de confirmação mostrar os "Brancos"
+  };
+
   const handleConfirm = async () => {
     if (!currentScrutiny) return;
     
@@ -248,6 +253,13 @@ export default function Urna() {
     setAuthenticatedCode(null);
     setAuthInput('');
     setUrlCodeProcessed(false);
+
+    // O FIX MÁGICO DO VOTO NEGADO: Limpar a URL sem atualizar a página
+    const url = new URL(window.location.href);
+    if (url.searchParams.has('codigo')) {
+      url.searchParams.delete('codigo');
+      window.history.replaceState({}, document.title, url.pathname);
+    }
   };
 
   const handlePinPress = (num: string) => {
@@ -266,7 +278,7 @@ export default function Urna() {
     }
   };
 
-  // TELA DE ESPERA / FECHADA (Alterado h-screen para h-[100dvh])
+  // TELA DE ESPERA / FECHADA
   if (!isOpen || votingClosed) {
     return (
       <div className="h-[100dvh] flex flex-col items-center justify-center bg-primary p-8 overflow-hidden relative">
@@ -318,7 +330,7 @@ export default function Urna() {
                   {authInput ? authInput : <span className="text-primary-foreground/30">000000</span>}
                 </div>
 
-                {/* Teclado Numérico (Numpad) do Eleitor */}
+                {/* Teclado Numérico */}
                 <div className="grid grid-cols-3 gap-2 w-full max-w-[280px] mx-auto mb-4">
                   {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(num => (
                     <button
@@ -524,10 +536,12 @@ export default function Urna() {
     );
   }
 
-  // TELA PRINCIPAL DA URNA (Corrigida: h-[100dvh] e overflow correto sem justify-center)
+  // RENDERIZAÇÃO DA TELA (Muda entre Seleção e Confirmação)
   return (
     <div className="h-[100dvh] bg-primary flex flex-col overflow-hidden relative">
-      <header className="shrink-0 p-3 md:p-4 border-b border-primary-foreground/10">
+      
+      {/* CABEÇALHO GLOBAL (Sempre visível) */}
+      <header className="shrink-0 p-3 md:p-4 border-b border-primary-foreground/10 z-10 bg-primary">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex flex-col md:flex-row md:items-center gap-3 md:gap-4">
             <div className="flex items-center gap-2">
@@ -540,21 +554,20 @@ export default function Urna() {
                 className={`transition-colors border-2 ${highContrast ? 'bg-white text-black border-white hover:bg-gray-200' : 'bg-transparent text-primary-foreground border-primary-foreground/30 hover:bg-primary-foreground/10'}`}
               >
                 {highContrast ? <Moon className="w-5 h-5 mr-2" /> : <Sun className="w-5 h-5 mr-2" />}
-                <span className="font-bold">{highContrast ? 'Modo Escuro' : 'Alto Contraste'}</span>
+                <span className="font-bold hidden sm:inline">{highContrast ? 'Modo Escuro' : 'Alto Contraste'}</span>
               </Button>
             </div>
             <div className="ml-2 md:ml-0">
               <h1 className="text-2xl md:text-3xl font-display font-bold text-primary-foreground leading-none">
                 {currentScrutiny.type === 'presbitero' ? 'Presbíteros' : 'Diáconos'}
               </h1>
-              {/* Alterado para Escrutínio */}
               <p className="text-lg md:text-xl text-primary-foreground/60 mt-1">
                 {currentScrutiny.round}º Escrutínio — Escolha até {effectiveMax} nome(s)
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2 bg-primary-foreground/10 px-5 py-2 md:py-3 rounded-xl hidden sm:flex">
-            <span className="text-primary-foreground/60 text-lg md:text-xl font-bold">Escolhidos:</span>
+          <div className="flex items-center gap-2 bg-primary-foreground/10 px-4 py-2 md:px-5 md:py-3 rounded-xl">
+            <span className="text-primary-foreground/60 text-lg md:text-xl font-bold hidden sm:block">Escolhidos:</span>
             <span className={`font-bold text-2xl md:text-3xl ${selectedIds.length === effectiveMax ? 'text-gold' : 'text-primary-foreground'}`}>
               {selectedIds.length}/{effectiveMax}
             </span>
@@ -562,116 +575,146 @@ export default function Urna() {
         </div>
       </header>
 
-      {/* Removido o justify-center e flex-col que causava o corte no topo.
-          Adicionado pb-8 para não grudar no rodapé */}
-      <main className="flex-1 overflow-y-auto p-2 md:p-6">
-        <div className="w-full max-w-7xl mx-auto flex flex-wrap justify-center gap-3 md:gap-5 pt-4 pb-8">
-          {participatingCandidates.map(c => {
-            const isSelected = selectedIds.includes(c.id);
-            
-            const cardBaseStyle = highContrast
-              ? 'bg-white border-[3px] border-gray-300 hover:bg-gray-100'
-              : 'bg-primary-foreground/5 border-[3px] border-transparent hover:bg-primary-foreground/10';
-              
-            const cardSelectedStyle = highContrast
-              ? 'bg-gray-200 border-[3px] border-black ring-4 ring-black/30 scale-[1.02]'
-              : 'bg-gold/20 border-[3px] border-gold ring-4 ring-gold/30 scale-[1.02]';
-              
-            const textStyle = highContrast ? 'text-black' : 'text-primary-foreground';
-            const iconBgStyle = highContrast ? 'bg-gray-100' : 'bg-primary-foreground/10';
-            const iconColorStyle = highContrast ? 'text-gray-500' : 'text-primary-foreground/30';
-            const checkBgStyle = highContrast ? 'bg-black text-white' : 'bg-gold text-accent-foreground';
+      {!showConfirm ? (
+        // ==========================================
+        // MODO 1: TELA DE SELEÇÃO DE CANDIDATOS
+        // ==========================================
+        <>
+          <main className="flex-1 p-2 md:p-4 overflow-y-auto">
+            <div className="w-full max-w-7xl mx-auto flex flex-wrap justify-center gap-3 md:gap-5 pt-4 pb-8">
+              {participatingCandidates.map(c => {
+                const isSelected = selectedIds.includes(c.id);
+                
+                const cardBaseStyle = highContrast
+                  ? 'bg-white border-[3px] border-gray-300 hover:bg-gray-100'
+                  : 'bg-primary-foreground/5 border-[3px] border-transparent hover:bg-primary-foreground/10';
+                  
+                const cardSelectedStyle = highContrast
+                  ? 'bg-gray-200 border-[3px] border-black ring-4 ring-black/30 scale-[1.02]'
+                  : 'bg-gold/20 border-[3px] border-gold ring-4 ring-gold/30 scale-[1.02]';
+                  
+                const textStyle = highContrast ? 'text-black' : 'text-primary-foreground';
+                const iconBgStyle = highContrast ? 'bg-gray-100' : 'bg-primary-foreground/10';
+                const iconColorStyle = highContrast ? 'text-gray-500' : 'text-primary-foreground/30';
+                const checkBgStyle = highContrast ? 'bg-black text-white' : 'bg-gold text-accent-foreground';
 
-            return (
-              <button
-                key={c.id}
-                onClick={() => toggleCandidate(c.id)}
-                className={`
-                  w-[45%] sm:w-[30%] md:w-[22%] lg:w-[18%] max-w-[220px] shrink-0
-                  relative p-3 md:p-4 rounded-xl transition-all duration-200 text-center flex flex-col items-center justify-center
-                  ${isSelected ? cardSelectedStyle : cardBaseStyle}
-                `}
-              >
-                <div className={`w-16 h-16 md:w-24 md:h-24 mb-3 rounded-full overflow-hidden shrink-0 shadow-lg ${iconBgStyle}`}>
-                  {c.photo ? (
-                    <img src={c.photo} alt={c.name} className="w-full h-full object-cover" />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center">
-                      <Users className={`w-8 h-8 md:w-12 md:h-12 ${iconColorStyle}`} />
+                return (
+                  <button
+                    key={c.id}
+                    onClick={() => toggleCandidate(c.id)}
+                    className={`
+                      w-[45%] sm:w-[30%] md:w-[22%] lg:w-[18%] max-w-[220px] shrink-0
+                      relative p-3 md:p-4 rounded-xl transition-all duration-200 text-center flex flex-col items-center justify-center
+                      ${isSelected ? cardSelectedStyle : cardBaseStyle}
+                    `}
+                  >
+                    <div className={`w-16 h-16 md:w-24 md:h-24 mb-3 rounded-full overflow-hidden shrink-0 shadow-lg ${iconBgStyle}`}>
+                      {c.photo ? (
+                        <img src={c.photo} alt={c.name} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <Users className={`w-8 h-8 md:w-12 md:h-12 ${iconColorStyle}`} />
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
-                <p className={`font-bold text-xl md:text-2xl leading-tight line-clamp-2 ${textStyle}`}>
-                  {c.name}
-                </p>
-                {isSelected && (
-                  <div className={`absolute top-2 right-2 md:top-3 md:right-3 w-8 h-8 md:w-10 md:h-10 rounded-full flex items-center justify-center shadow-lg ${checkBgStyle}`}>
-                    <CheckCircle2 className="w-5 h-5 md:w-7 md:h-7" />
-                  </div>
-                )}
-              </button>
-            );
-          })}
-        </div>
-      </main>
+                    <p className={`font-bold text-xl md:text-2xl leading-tight line-clamp-2 ${textStyle}`}>
+                      {c.name}
+                    </p>
+                    {isSelected && (
+                      <div className={`absolute top-2 right-2 md:top-3 md:right-3 w-8 h-8 md:w-10 md:h-10 rounded-full flex items-center justify-center shadow-lg ${checkBgStyle}`}>
+                        <CheckCircle2 className="w-5 h-5 md:w-7 md:h-7" />
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </main>
 
-      {/* O footer "shrink-0" junto com o h-[100dvh] garante que ele ficará sempre preso no fim da tela */}
-      <footer className="shrink-0 p-3 md:p-4 border-t border-primary-foreground/10 bg-primary/95 backdrop-blur shadow-[0_-10px_30px_rgba(0,0,0,0.3)]">
-        <div className="max-w-7xl mx-auto flex items-center justify-between h-full">
-          
-          <div className="flex-1 pr-4 hidden sm:block">
-            {showConfirm ? (
-              <p className="text-primary-foreground font-display font-bold text-lg md:text-2xl">
-                {selectedIds.length === 0 
-                  ? `Confirmar ${blankCount} VOTO(S) EM BRANCO?`
-                  : blankCount > 0 
-                    ? `Confirmar ${selectedIds.length} candidato(s) e ${blankCount} VOTO(S) EM BRANCO?`
-                    : `Confirmar voto em ${selectedIds.length} candidato(s)?`
-                }
-              </p>
-            ) : (
-              <div className="flex items-center gap-3">
-                <Vote className="w-8 h-8 text-primary-foreground/30" />
-                <p className="text-primary-foreground/50 text-xl font-bold">
-                  Selecione os nomes acima e toque em VOTAR à direita.
-                </p>
-              </div>
-            )}
-          </div>
-
-          <div className="flex items-center justify-end gap-3 w-full sm:w-auto shrink-0">
-            {showConfirm && (
-              <Button variant="ghost" onClick={() => setShowConfirm(false)} className="text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground text-lg md:text-xl py-6 md:py-8 px-4 md:px-6">
-                Corrigir
+          <footer className="shrink-0 p-4 border-t border-primary-foreground/10 bg-primary/95 backdrop-blur shadow-[0_-10px_30px_rgba(0,0,0,0.3)]">
+            <div className="max-w-5xl mx-auto flex flex-col sm:flex-row gap-4 h-full">
+              <Button 
+                variant="outline" 
+                onClick={handleBlankVoteClick} 
+                className="w-full sm:w-1/3 h-14 md:h-16 text-lg md:text-xl font-bold border-primary-foreground/30 text-primary-foreground hover:bg-primary-foreground/10 hover:text-white"
+              >
+                VOTAR EM BRANCO
               </Button>
-            )}
-            
-            <Button
-              onClick={showConfirm ? handleConfirm : () => setShowConfirm(true)}
-              className={`
-                font-bold text-xl md:text-3xl py-6 md:py-8 shadow-xl transition-all flex-1 sm:flex-none
-                w-full sm:w-[260px] md:w-[320px] 
-                ${showConfirm ? 'bg-success text-success-foreground hover:bg-success/90 animate-pulse-ring' : 
-                  selectedIds.length === 0 ? 'bg-secondary text-secondary-foreground hover:bg-secondary/80' : 'bg-gold text-accent-foreground hover:bg-gold-light'}
-              `}
-            >
-              {showConfirm ? (
-                'CONFIRMAR'
-              ) : selectedIds.length === 0 ? (
-                <><Vote className="w-6 h-6 md:w-8 md:h-8 mr-2 shrink-0" /> <span>VOTAR</span></>
-              ) : (
-                <><Vote className="w-6 h-6 md:w-8 md:h-8 mr-2 shrink-0" /> <span>VOTAR ({selectedIds.length})</span></>
-              )}
-            </Button>
-          </div>
+              <Button 
+                onClick={handleAdvanceToConfirm} 
+                disabled={selectedIds.length === 0}
+                className={`w-full sm:w-2/3 h-14 md:h-16 text-xl md:text-2xl font-black uppercase tracking-wider transition-all shadow-md ${selectedIds.length > 0 ? 'bg-success hover:bg-green-600 text-white' : 'bg-slate-200 text-slate-400'}`}
+              >
+                AVANÇAR
+              </Button>
+            </div>
+          </footer>
+        </>
+      ) : (
+        // ==========================================
+        // MODO 2: TELA DE CONFIRMAÇÃO DO VOTO
+        // ==========================================
+        <>
+          <main className="flex-1 p-4 md:p-6 overflow-y-auto">
+            <div className="w-full max-w-3xl mx-auto flex flex-col items-center pt-4 pb-8">
+              <h2 className="text-2xl md:text-4xl font-display font-bold text-primary-foreground mb-8 text-center">
+                Confira o seu voto:
+              </h2>
+              
+              <div className="w-full flex flex-col gap-4">
+                {/* Mostra os Candidatos Escolhidos */}
+                {state.candidates.filter(c => selectedIds.includes(c.id)).map(c => (
+                  <div key={c.id} className="flex items-center gap-4 bg-primary-foreground/10 p-3 md:p-4 rounded-2xl shadow-md border-2 border-gold">
+                    <div className="w-16 h-16 md:w-20 md:h-20 rounded-full overflow-hidden shrink-0 bg-primary">
+                      {c.photo ? (
+                        <img src={c.photo} alt={c.name} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <Users className="w-8 h-8 text-primary-foreground/30" />
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <p className="font-bold text-xl md:text-3xl text-primary-foreground">{c.name}</p>
+                    </div>
+                  </div>
+                ))}
 
-        </div>
-        {showConfirm && (
-          <p className="text-primary-foreground font-bold text-center mt-3 sm:hidden">
-            {selectedIds.length === 0 ? `Confirmar ${blankCount} BRANCOS?` : `Confirmar ${selectedIds.length} candidato(s)?`}
-          </p>
-        )}
-      </footer>
+                {/* Mostra Explicitamente os Votos em Branco */}
+                {blankCount > 0 && Array.from({ length: blankCount }).map((_, i) => (
+                  <div key={`blank-${i}`} className="flex items-center gap-4 bg-primary-foreground/5 p-3 md:p-4 rounded-2xl shadow-inner border-2 border-dashed border-primary-foreground/30">
+                    <div className="w-16 h-16 md:w-20 md:h-20 rounded-full shrink-0 bg-primary-foreground/20 flex items-center justify-center">
+                      <div className="w-6 h-6 md:w-8 md:h-8 bg-primary rounded-full"></div>
+                    </div>
+                    <div>
+                      <p className="font-bold text-xl md:text-3xl text-primary-foreground/70 uppercase">Voto em Branco</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </main>
+
+          <footer className="shrink-0 p-4 border-t border-primary-foreground/10 bg-primary/95 backdrop-blur shadow-[0_-10px_30px_rgba(0,0,0,0.3)]">
+            <div className="max-w-5xl mx-auto flex flex-col sm:flex-row gap-4 h-full">
+              <Button 
+                variant="outline" 
+                onClick={() => { setShowConfirm(false); setSelectedIds([]); }} 
+                className="w-full sm:w-1/2 h-14 md:h-20 text-xl md:text-2xl font-bold border-destructive text-destructive hover:bg-destructive hover:text-white transition-all"
+              >
+                <XCircle className="w-6 h-6 md:w-8 md:h-8 mr-2" /> CORRIGIR
+              </Button>
+              <Button 
+                onClick={handleConfirm} 
+                className="w-full sm:w-1/2 h-14 md:h-20 text-xl md:text-2xl font-black uppercase tracking-wider bg-success hover:bg-green-600 text-white shadow-[0_0_20px_rgba(34,197,94,0.4)] transition-all"
+              >
+                <CheckCircle2 className="w-6 h-6 md:w-8 md:h-8 mr-2" /> CONFIRMAR
+              </Button>
+            </div>
+          </footer>
+        </>
+      )}
+
     </div>
   );
 }
