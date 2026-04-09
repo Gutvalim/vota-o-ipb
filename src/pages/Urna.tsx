@@ -207,15 +207,6 @@ export default function Urna() {
     });
   };
 
-  const handleAdvanceToConfirm = () => {
-    setShowConfirm(true);
-  };
-
-  const handleBlankVoteClick = () => {
-    setSelectedIds([]); // Garante que a seleção fica vazia
-    setShowConfirm(true); // Vai para a tela de confirmação mostrar os "Brancos"
-  };
-
   const handleConfirm = async () => {
     if (!currentScrutiny) return;
     
@@ -254,7 +245,8 @@ export default function Urna() {
     setAuthInput('');
     setUrlCodeProcessed(false);
 
-    // O FIX MÁGICO DO VOTO NEGADO: Limpar a URL sem atualizar a página
+    // FIX MÁGICO DO VOTO NEGADO: Limpa a URL do navegador sem recarregar a página
+    // Isso evita que a pessoa aperte F5 ou que o próximo irmão trave com o código do anterior
     const url = new URL(window.location.href);
     if (url.searchParams.has('codigo')) {
       url.searchParams.delete('codigo');
@@ -441,7 +433,7 @@ export default function Urna() {
             </p>
             <div className="bg-primary-foreground/5 p-4 rounded-xl border border-primary-foreground/10 mb-8 w-full">
                <p className="text-gold font-bold text-xl">Muito obrigado pela participação.</p>
-               <p className="text-primary-foreground/50 mt-2">Você já pode fechar esta página.</p>
+               <p className="text-primary-foreground/50 mt-2">Você já pode fechar esta página ou prosseguir.</p>
             </div>
             
             <Button 
@@ -631,22 +623,34 @@ export default function Urna() {
             </div>
           </main>
 
-          <footer className="shrink-0 p-4 border-t border-primary-foreground/10 bg-primary/95 backdrop-blur shadow-[0_-10px_30px_rgba(0,0,0,0.3)]">
-            <div className="max-w-5xl mx-auto flex flex-col sm:flex-row gap-4 h-full">
-              <Button 
-                variant="outline" 
-                onClick={handleBlankVoteClick} 
-                className="w-full sm:w-1/3 h-14 md:h-16 text-lg md:text-xl font-bold border-primary-foreground/30 text-primary-foreground hover:bg-primary-foreground/10 hover:text-white"
-              >
-                VOTAR EM BRANCO
-              </Button>
-              <Button 
-                onClick={handleAdvanceToConfirm} 
-                disabled={selectedIds.length === 0}
-                className={`w-full sm:w-2/3 h-14 md:h-16 text-xl md:text-2xl font-black uppercase tracking-wider transition-all shadow-md ${selectedIds.length > 0 ? 'bg-success hover:bg-green-600 text-white' : 'bg-slate-200 text-slate-400'}`}
-              >
-                AVANÇAR
-              </Button>
+          <footer className="shrink-0 p-3 md:p-4 border-t border-primary-foreground/10 bg-primary/95 backdrop-blur shadow-[0_-10px_30px_rgba(0,0,0,0.3)]">
+            <div className="max-w-7xl mx-auto flex items-center justify-between h-full">
+              
+              <div className="flex-1 pr-4 hidden sm:block">
+                <div className="flex items-center gap-3">
+                  <Vote className="w-8 h-8 text-primary-foreground/30" />
+                  <p className="text-primary-foreground/50 text-xl font-bold">
+                    Selecione os nomes acima e toque em VOTAR à direita.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 w-full sm:w-auto shrink-0">
+                <Button
+                  onClick={() => setShowConfirm(true)}
+                  className={`
+                    font-bold text-xl md:text-3xl py-6 md:py-8 shadow-xl transition-all flex-1 sm:flex-none
+                    w-full sm:w-[260px] md:w-[320px] 
+                    ${selectedIds.length === 0 ? 'bg-secondary text-secondary-foreground hover:bg-secondary/80' : 'bg-gold text-accent-foreground hover:bg-gold-light'}
+                  `}
+                >
+                  {selectedIds.length === 0 ? (
+                    <><Vote className="w-6 h-6 md:w-8 md:h-8 mr-2 shrink-0" /> <span>VOTAR</span></>
+                  ) : (
+                    <><Vote className="w-6 h-6 md:w-8 md:h-8 mr-2 shrink-0" /> <span>VOTAR ({selectedIds.length})</span></>
+                  )}
+                </Button>
+              </div>
             </div>
           </footer>
         </>
